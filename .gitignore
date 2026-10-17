@@ -1,0 +1,54 @@
+# Python & Backend Sanal Ortam / Önbellek
+venv/
+backend/venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# SQLite Veritabanı ve Geçici Dosyalar
+backend/fon_platformu.db
+backend/*.db
+backend/*.db-journal
+backend/*.db-wal
+backend/*.db-shm
+*.sqlite
+*.sqlite3
+
+# Yüklenen Dosyalar (Uploads)
+backend/static/uploads/*
+!backend/static/uploads/.gitkeep
+
+# Node.js & Next.js Derleme Dosyaları
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+frontend/out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Ortam Değişkenleri ve Gizli Anahtarlar (.env)
+.env
+.env.*
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Loglar ve İşletim Sistemi Dosyaları
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
