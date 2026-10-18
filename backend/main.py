@@ -36,6 +36,12 @@ from database import (
     get_total_price_records,
     seed_settings,
     seed_legal_settings,
+    seed_tracked_funds,
+    seed_contact_messages,
+    insert_contact_message,
+    get_contact_messages,
+    set_contact_message_read,
+    delete_contact_message,
     get_settings,
     update_settings,
     get_splash_settings,
@@ -83,6 +89,12 @@ from tefas_fetcher import (
     TefasFetchError,
     TEFAS_DISCOVERY_POOL,
     discover_and_add_random_five_funds,
+    ensure_fund_prices_exist,
+)
+from telemetry_engine import (
+    seed_telemetry_events,
+    record_telemetry_event,
+    get_telemetry_dashboard_data,
 )
 
 
@@ -111,18 +123,14 @@ ADMIN_SECRET_TOKEN = os.environ.get(
 
 
 def ensure_initialized() -> None:
-    """Veritabanı tablolarını ve başlangıç tohum verilerini kontrol eder."""
+    """Veritabanı tablolarını ve başlangıç tohum verilerini kontrol eder (hiçbir fonu silmez)."""
     init_db()
     seed_settings()
     seed_legal_settings()
+    seed_tracked_funds()
+    seed_contact_messages()
     seed_research_logs()
     with get_connection() as conn:
-        price_cnt = conn.execute("SELECT COUNT(*) as c FROM fund_prices;").fetchone()["c"]
-        if price_cnt > 0:
-            conn.execute(
-                "DELETE FROM funds WHERE fund_code NOT IN (SELECT DISTINCT fund_code FROM fund_prices);"
-            )
-            conn.commit()
         ev_cnt = conn.execute("SELECT COUNT(*) as c FROM evidence_cards;").fetchone()["c"]
         b_cnt = conn.execute("SELECT COUNT(*) as c FROM bulletins;").fetchone()["c"]
         tx_cnt = conn.execute("SELECT COUNT(*) as c FROM finance_transactions;").fetchone()["c"]
@@ -136,6 +144,10 @@ def ensure_initialized() -> None:
             pass
     if tx_cnt == 0:
         seed_sample_personal_finance(reset_existing=False)
+    try:
+        seed_telemetry_events()
+    except Exception:
+        pass
 
 
 ensure_initialized()
@@ -164,9 +176,24 @@ async def lifespan(app_instance: FastAPI):
     if not scheduler.running:
         scheduler.start()
 
-    # 2. Sistem ilk açıldığında (startup) veritabanındaki en son tarihe arka planda bak ve kontrol kaydı oluştur
+    # 2. Sistem ilk açıldığında (startup) eksik fiyatlı takip edilen fonları ve günlük güncellemeyi arka planda tamamla
     def _startup_bg():
         try:
+            with get_connection() as conn:
+                missing_rows = conn.execute(
+                    """
+                    SELECT f.fund_code
+                    FROM funds f
+                    LEFT JOIN (
+                        SELECT fund_code, COUNT(*) AS cnt FROM fund_prices GROUP BY fund_code
+                    ) fp ON fp.fund_code = f.fund_code
+                    WHERE COALESCE(fp.cnt, 0) < 30
+                    ORDER BY f.fund_code ASC;
+                    """
+                ).fetchall()
+            missing_codes = [r["fund_code"] for r in missing_rows]
+            if missing_codes:
+                ensure_fund_prices_exist(missing_codes)
             run_daily_tefas_sync(sync_type="STARTUP_AUTO_CHECK", force_check=False)
         except Exception:
             pass
@@ -351,6 +378,32 @@ class ResearchLogCreateRequest(BaseModel):
     trust_score_pre: int = Field(default=50, ge=0, le=100)
     trust_score_post: int = Field(default=90, ge=0, le=100)
     notes: str = Field(default="")
+
+
+class ContactMessageCreateRequest(BaseModel):
+    full_name: str = Field(..., min_length=2, example="Arş. Gör. Zeynep Kaya")
+    email: str = Field(..., min_length=5, example="zeynep.kaya@universite.edu.tr")
+    phone: str = Field(..., min_length=10, example="0532 418 72 90")
+    subject: str = Field(..., example="Akademik İş Birliği")
+    message: str = Field(..., min_length=5, example="TÜBİTAK 2209-A projeniz kapsamında görüşmek isteriz.")
+    kvkk_approved: bool = Field(..., example=True)
+
+
+class ContactMessageReadUpdateRequest(BaseModel):
+    is_read: bool = Field(..., example=True)
+
+
+class TelemetryTrackRequest(BaseModel):
+    session_id: Optional[str] = Field(default="anon-session")
+    event_type: str = Field(..., example="PAGE_VIEW")
+    module_name: str = Field(..., example="analytics")
+    fund_code: Optional[str] = Field(default=None, example="AFT")
+    paired_fund_code: Optional[str] = Field(default=None, example="TTE")
+    date_range_label: Optional[str] = Field(default=None, example="6 Ay")
+    bulletin_id: Optional[int] = Field(default=None)
+    duration_seconds: float = Field(default=0.0, ge=0.0)
+    basket_weight_pct: Optional[float] = Field(default=None)
+    metadata: Optional[Dict[str, Any]] = Field(default=None)
 
 
 # --- GENEL (PUBLIC) SİSTEM & SENKRONİZASYON UÇ NOKTALARI ---
@@ -1020,7 +1073,16 @@ def api_get_evidence_cards() -> Dict[str, Any]:
 @app.get("/api/transparency/{fund_code}")
 def api_get_fund_transparency(fund_code: str) -> Dict[str, Any]:
     try:
-        return evaluate_fund_transparency(fund_code=fund_code)
+        res = evaluate_fund_transparency(fund_code=fund_code)
+        try:
+            record_telemetry_event(
+                event_type="TRANSPARENCY_QUERY",
+                module_name="transparency",
+                fund_code=fund_code,
+            )
+        except Exception:
+            pass
+        return res
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -1065,6 +1127,16 @@ def api_get_bulletin_detail(bulletin_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"ID={bulletin_id} olan bülten bulunamadı.")
     item = dict(row)
     item["ai_summary"] = json.loads(item["ai_summary_json"])
+    try:
+        record_telemetry_event(
+            event_type="BULLETIN_OPEN",
+            module_name="bulletins",
+            fund_code=item.get("fund_code"),
+            bulletin_id=bulletin_id,
+            metadata={"bulletin_title": item.get("title"), "institution": item.get("institution")},
+        )
+    except Exception:
+        pass
     return item
 
 
@@ -1097,11 +1169,21 @@ def api_fetch_new_fund(req: FundFetchRequest) -> Dict[str, Any]:
 @app.post("/api/analytics/performance")
 def api_analyze_performance(req: AnalyticsPerformanceRequest) -> Dict[str, Any]:
     try:
-        return analyze_fund_performance(
+        res = analyze_fund_performance(
             fund_code=req.fund_code,
             requested_start_date=req.start_date,
             requested_end_date=req.end_date,
         )
+        try:
+            record_telemetry_event(
+                event_type="ANALYTICS_QUERY",
+                module_name="analytics",
+                fund_code=req.fund_code,
+                metadata={"start_date": req.start_date, "end_date": req.end_date},
+            )
+        except Exception:
+            pass
+        return res
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1109,11 +1191,38 @@ def api_analyze_performance(req: AnalyticsPerformanceRequest) -> Dict[str, Any]:
 @app.post("/api/analytics/compare")
 def api_compare_funds(req: AnalyticsCompareRequest) -> Dict[str, Any]:
     try:
-        return compare_funds_normalized(
+        res = compare_funds_normalized(
             fund_codes=req.fund_codes,
             requested_start_date=req.start_date,
             requested_end_date=req.end_date,
         )
+        try:
+            cleaned = [c.strip().upper() for c in req.fund_codes if c and c.strip()]
+            if len(cleaned) >= 2:
+                for i in range(len(cleaned)):
+                    for j in range(i + 1, min(len(cleaned), 5)):
+                        c1, c2 = sorted([cleaned[i], cleaned[j]])
+                        record_telemetry_event(
+                            event_type="FUND_COMPARE",
+                            module_name="analytics",
+                            fund_code=c1,
+                            paired_fund_code=c2,
+                            metadata={
+                                "fund_codes": cleaned,
+                                "start_date": req.start_date,
+                                "end_date": req.end_date,
+                            },
+                        )
+            elif len(cleaned) == 1:
+                record_telemetry_event(
+                    event_type="ANALYTICS_QUERY",
+                    module_name="analytics",
+                    fund_code=cleaned[0],
+                    metadata={"start_date": req.start_date, "end_date": req.end_date},
+                )
+        except Exception:
+            pass
+        return res
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1297,11 +1406,25 @@ def api_export_analytics_xlsx(req: AnalyticsCompareRequest) -> StreamingResponse
 def api_simulate_basket(req: BasketSimulateRequest) -> Dict[str, Any]:
     try:
         allocs = [{"fund_code": a.fund_code, "amount_tl": a.amount_tl} for a in req.allocations]
-        return simulate_virtual_basket(
+        res = simulate_virtual_basket(
             allocations=allocs,
             start_date=req.start_date,
             end_date=req.end_date,
         )
+        try:
+            tot_amt = sum(float(a.amount_tl) for a in req.allocations if a.amount_tl > 0) or 1.0
+            for a in req.allocations:
+                w_pct = (float(a.amount_tl) / tot_amt) * 100.0
+                record_telemetry_event(
+                    event_type="BASKET_SIMULATE",
+                    module_name="baskets",
+                    fund_code=a.fund_code,
+                    basket_weight_pct=round(w_pct, 2),
+                    metadata={"start_date": req.start_date, "end_date": req.end_date, "amount_tl": a.amount_tl},
+                )
+        except Exception:
+            pass
+        return res
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1401,3 +1524,135 @@ def api_ask_assistant(req: AssistantAskRequest) -> Dict[str, Any]:
         end_date=req.end_date,
         month_prefix=req.month_prefix,
     )
+
+
+# --- BÖLÜM 2: PROJE KÜNYESİ & İLETİŞİM MODÜLÜ (/contact) VE ADMİN GELEN KUTUSU ---
+
+@app.post("/api/public/contact")
+def api_submit_contact_message(req: ContactMessageCreateRequest) -> Dict[str, Any]:
+    """
+    Kullanıcıların /contact sayfasından gönderdiği akademik iş birliği, veri hatası
+    bildirimi ve geri bildirim mesajlarını KVKK açık rıza doğrulamasıyla kaydeder.
+    """
+    if not req.kvkk_approved:
+        raise HTTPException(
+            status_code=400,
+            detail="Mesaj gönderebilmek için 6698 sayılı KVKK açık rıza onay kutucuğunu işaretlemeniz gerekmektedir.",
+        )
+
+    import re
+    digits_only = re.sub(r"\D", "", req.phone or "")
+    if not (len(digits_only) == 11 and digits_only.startswith("05")):
+        raise HTTPException(
+            status_code=400,
+            detail="Lütfen geçerli bir cep telefonu numarası giriniz (Örn: 05XX XXX XX XX).",
+        )
+
+    formatted_phone = f"{digits_only[0:4]} {digits_only[4:7]} {digits_only[7:9]} {digits_only[9:11]}"
+
+    try:
+        saved = insert_contact_message(
+            full_name=req.full_name,
+            email=req.email,
+            phone=formatted_phone,
+            subject=req.subject,
+            message=req.message,
+            kvkk_approved=req.kvkk_approved,
+        )
+        try:
+            record_telemetry_event(
+                event_type="CONTACT_SUBMIT",
+                module_name="contact",
+                metadata={"subject": req.subject},
+            )
+        except Exception:
+            pass
+        return {
+            "status": "SUBMITTED",
+            "message": "Mesajınız proje araştırma ekibine başarıyla iletildi. Katkınız için teşekkür ederiz.",
+            "contact_message": saved,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/admin/contact-messages")
+def api_admin_list_contact_messages(
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Admin Paneli — Gelen İletişim Mesajlarını listeler."""
+    messages = get_contact_messages()
+    unread_count = sum(1 for m in messages if not m.get("is_read"))
+    return {
+        "count": len(messages),
+        "unread_count": unread_count,
+        "messages": messages,
+    }
+
+
+@app.patch("/api/admin/contact-messages/{msg_id}/read")
+def api_admin_mark_contact_message_read(
+    msg_id: int,
+    req: ContactMessageReadUpdateRequest,
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Admin Paneli — İletişim mesajını Okundu / Okunmadı olarak işaretler."""
+    updated = set_contact_message_read(msg_id=msg_id, is_read=req.is_read)
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"ID={msg_id} olan iletişim mesajı bulunamadı.")
+    return {
+        "status": "UPDATED",
+        "msg_id": msg_id,
+        "is_read": req.is_read,
+    }
+
+
+@app.delete("/api/admin/contact-messages/{msg_id}")
+def api_admin_delete_contact_message(
+    msg_id: int,
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Admin Paneli — İletişim mesajını kalıcı olarak siler."""
+    deleted = delete_contact_message(msg_id=msg_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"ID={msg_id} olan iletişim mesajı bulunamadı.")
+    return {
+        "status": "DELETED",
+        "msg_id": msg_id,
+    }
+
+
+# --- BÖLÜM 3: ULTRA DETAYLI KULLANICI DAVRANIŞI VE FON TELEMETRİ SİSTEMİ ---
+
+@app.post("/api/telemetry/track")
+def api_track_telemetry_event(req: TelemetryTrackRequest) -> Dict[str, Any]:
+    """
+    Frontend'den gelen anonim kullanıcı etkileşimlerini (sayfa görüntüleme,
+    sayfada kalma süresi, fon inceleme, ikili fon karşılaştırma, sanal sepet
+    ağırlıklandırma, bülten okuma/kaynak tıklama) kaydeder.
+    """
+    event_id = record_telemetry_event(
+        session_id=req.session_id,
+        event_type=req.event_type,
+        module_name=req.module_name,
+        fund_code=req.fund_code,
+        paired_fund_code=req.paired_fund_code,
+        date_range_label=req.date_range_label,
+        bulletin_id=req.bulletin_id,
+        duration_seconds=req.duration_seconds,
+        basket_weight_pct=req.basket_weight_pct,
+        metadata=req.metadata,
+    )
+    return {"status": "RECORDED", "event_id": event_id}
+
+
+@app.get("/api/admin/telemetry/dashboard")
+def api_admin_get_telemetry_dashboard(
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """
+    Admin Paneli — 'Platform İstatistikleri & Davranış Analizi' sekmesi için
+    5 ana analitik bölümün tamamını döndürür.
+    """
+    return get_telemetry_dashboard_data()
+

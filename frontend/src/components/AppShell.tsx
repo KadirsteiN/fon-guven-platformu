@@ -16,8 +16,9 @@ import {
   X,
   CheckCircle2,
   RefreshCw,
+  MessageSquare,
 } from "lucide-react";
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch, trackTelemetryEvent } from "@/lib/api";
 
 const NAV_ITEMS = [
   {
@@ -49,6 +50,11 @@ const NAV_ITEMS = [
     href: "/baskets",
     label: "Sanal Sepet Laboratuvarı",
     icon: Briefcase,
+  },
+  {
+    href: "/contact",
+    label: "İletişim & Geri Bildirim",
+    icon: MessageSquare,
   },
 ];
 
@@ -95,6 +101,49 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () =>
       window.removeEventListener("branding-updated", handleBrandingEvent);
   }, []);
+
+  // BÖLÜM 3: Sayfa Görüntülenme (PAGE_VIEW) ve Sayfada Kalma Süresi (TIME_ON_PAGE) Telemetrisi
+  useEffect(() => {
+    if (!pathname || pathname.startsWith("/admin")) return;
+
+    const moduleName = pathname === "/" ? "home" : pathname.replace(/^\//, "");
+    const enteredAt = Date.now();
+    let reportedDurationSec = 0;
+
+    trackTelemetryEvent({
+      event_type: "PAGE_VIEW",
+      module_name: moduleName,
+      duration_seconds: 0,
+    });
+
+    const flushDuration = () => {
+      const elapsedSec = Math.round((Date.now() - enteredAt) / 1000);
+      const deltaSec = elapsedSec - reportedDurationSec;
+      if (deltaSec >= 3 && deltaSec <= 1800) {
+        reportedDurationSec = elapsedSec;
+        trackTelemetryEvent({
+          event_type: "TIME_ON_PAGE",
+          module_name: moduleName,
+          duration_seconds: deltaSec,
+        });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushDuration();
+      }
+    };
+
+    window.addEventListener("beforeunload", flushDuration);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      flushDuration();
+      window.removeEventListener("beforeunload", flushDuration);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pathname]);
 
   const toggleTheme = () => {
     const next = !darkMode;

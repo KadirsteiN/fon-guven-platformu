@@ -230,6 +230,70 @@ def init_db(db_path: Optional[Path] = None) -> None:
             );
         """)
 
+        # 14. tracked_funds tablosu (BÖLÜM 1 - Kalıcı Takip Edilen Fon Havuzu)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tracked_funds (
+                fund_code TEXT PRIMARY KEY,
+                fund_title TEXT NOT NULL,
+                fund_type TEXT,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # 15. contact_messages tablosu (BÖLÜM 2 - Proje Künyesi & İletişim Gelen Kutusu)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                full_name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                message TEXT NOT NULL,
+                kvkk_approved INTEGER NOT NULL DEFAULT 1,
+                is_read INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # 16. analytics_events tablosu (BÖLÜM 3 - Kullanıcı Davranışı ve Fon Telemetri Motoru)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS analytics_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                module_name TEXT NOT NULL,
+                page_path TEXT,
+                fund_code TEXT,
+                paired_fund_code TEXT,
+                secondary_funds TEXT,
+                basket_weight_pct REAL,
+                weight_pct REAL,
+                duration_seconds REAL NOT NULL DEFAULT 0.0,
+                duration_sec INTEGER NOT NULL DEFAULT 0,
+                date_range_label TEXT,
+                bulletin_id INTEGER,
+                bulletin_title TEXT,
+                metadata_json TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        existing_cols = {
+            r["name"]
+            for r in cursor.execute("PRAGMA table_info(analytics_events);").fetchall()
+        }
+        for col_def in [
+            ("paired_fund_code", "TEXT"),
+            ("basket_weight_pct", "REAL"),
+            ("duration_seconds", "REAL NOT NULL DEFAULT 0.0"),
+        ]:
+            if col_def[0] not in existing_cols:
+                cursor.execute(
+                    f"ALTER TABLE analytics_events ADD COLUMN {col_def[0]} {col_def[1]};"
+                )
+
         # Sorgu performansı için indeksler
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_fund_prices_code_date
@@ -251,8 +315,76 @@ def init_db(db_path: Optional[Path] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_sync_logs_created
             ON sync_logs (created_at DESC);
         """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_analytics_events_type_fund
+            ON analytics_events (event_type, fund_code, created_at DESC);
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_contact_messages_created
+            ON contact_messages (created_at DESC);
+        """)
 
         conn.commit()
+
+
+DEFAULT_CORE_TRACKED_FUNDS: List[Dict[str, Any]] = [
+    {"fund_code": "AFT", "fund_title": "AK PORTFÖY YENİ TEKNOLOJİLER YABANCI HİSSE SENEDİ FONU", "fund_type": "Yabancı Hisse / Teknoloji Fonu", "is_default": 1},
+    {"fund_code": "TTE", "fund_title": "İŞ PORTFÖY BIST TEKNOLOJİ AĞIRLIK SINIRLAMALI ENDEKSİ HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Yabancı Hisse / Teknoloji Fonu", "is_default": 1},
+    {"fund_code": "YAY", "fund_title": "YAPI KREDİ PORTFÖY YABANCI TEKNOLOJİ SEKTÖRÜ HİSSE SENEDİ FONU", "fund_type": "Yabancı Hisse / Teknoloji Fonu", "is_default": 1},
+    {"fund_code": "TI2", "fund_title": "İŞ PORTFÖY İKİNCİ HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Hisse Senedi Yoğun Fon", "is_default": 1},
+    {"fund_code": "IPB", "fund_title": "İSTANBUL PORTFÖY BİRİNCİ DEĞİŞKEN FON", "fund_type": "Değişken / Çoklu Varlık Fonu", "is_default": 1},
+    {"fund_code": "MAC", "fund_title": "MARMARA KAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Hisse Senedi Yoğun Fon", "is_default": 1},
+    {"fund_code": "TTA", "fund_title": "İŞ PORTFÖY ALTIN FONU", "fund_type": "Kıymetli Madenler / Altın Fonu", "is_default": 1},
+    {"fund_code": "TI1", "fund_title": "İŞ PORTFÖY PARA PİYASASI (TL) FONU", "fund_type": "Para Piyasası (TL) Fonu", "is_default": 1},
+    {"fund_code": "GMR", "fund_title": "INVEO PORTFÖY İKİNCİ HİSSE SENEDİ FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Hisse Senedi Yoğun Fon", "is_default": 1},
+    {"fund_code": "NNF", "fund_title": "HEDEF PORTFÖY BİRİNCİ HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Hisse Senedi Yoğun Fon", "is_default": 1},
+    {"fund_code": "IDH", "fund_title": "İŞ PORTFÖY BIST 100 DIŞI ŞİRKETLER HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Hisse Senedi Yoğun Fon", "is_default": 1},
+    {"fund_code": "YAS", "fund_title": "YAPI KREDİ PORTFÖY KOÇ HOLDİNG İŞTİRAK VE HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)", "fund_type": "Hisse Senedi Yoğun Fon", "is_default": 1},
+]
+
+
+def seed_tracked_funds(db_path: Optional[Path] = None) -> int:
+    """
+    BÖLÜM 1: Sunucu başlangıcında varsayılan ana fonları (AFT, TTE, YAY, TI2, IPB, MAC, TTA, TI1 vb.)
+    INSERT OR IGNORE ile tracked_funds ve funds tablolarına ekler.
+    Mevcut eklenmiş fonları ASLA silmez veya üzerine yazmaz; iki tabloyu karşılıklı senkronize tutar.
+    """
+    with get_connection(db_path) as conn:
+        for item in DEFAULT_CORE_TRACKED_FUNDS:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO tracked_funds (fund_code, fund_title, fund_type, is_default, created_at, last_updated)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                """,
+                (item["fund_code"], item["fund_title"], item["fund_type"], item["is_default"]),
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO funds (fund_code, fund_title, fund_type, last_updated)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP);
+                """,
+                (item["fund_code"], item["fund_title"], item["fund_type"]),
+            )
+
+        # Mevcut funds tablosundaki tüm fonları tracked_funds tablosuna koruyarak aktar
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO tracked_funds (fund_code, fund_title, fund_type, is_default, created_at, last_updated)
+            SELECT fund_code, fund_title, fund_type, 0, CURRENT_TIMESTAMP, last_updated
+            FROM funds;
+            """
+        )
+        # tracked_funds tablosundaki tüm fonların funds tablosunda da bulunduğundan emin ol
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO funds (fund_code, fund_title, fund_type, last_updated)
+            SELECT fund_code, fund_title, fund_type, last_updated
+            FROM tracked_funds;
+            """
+        )
+        conn.commit()
+        cnt = conn.execute("SELECT COUNT(*) as c FROM tracked_funds;").fetchone()["c"]
+        return int(cnt)
 
 
 def upsert_fund(
@@ -261,18 +393,38 @@ def upsert_fund(
     fund_type: Optional[str] = None,
     db_path: Optional[Path] = None
 ) -> None:
-    """Fon bilgisini funds tablosuna ekler veya günceller."""
+    """Fon bilgisini hem funds hem de tracked_funds tablosuna silmeden (Upsert) ekler veya günceller."""
+    clean_code = fund_code.strip().upper()
     with get_connection(db_path) as conn:
         conn.execute(
             """
             INSERT INTO funds (fund_code, fund_title, fund_type, last_updated)
             VALUES (?, ?, COALESCE(?, (SELECT fund_type FROM funds WHERE fund_code = ?)), CURRENT_TIMESTAMP)
             ON CONFLICT(fund_code) DO UPDATE SET
-                fund_title = excluded.fund_title,
+                fund_title = CASE
+                    WHEN excluded.fund_title LIKE '%Yatırım Fonu' AND funds.fund_title NOT LIKE '%Yatırım Fonu'
+                    THEN funds.fund_title
+                    ELSE excluded.fund_title
+                END,
                 fund_type = COALESCE(excluded.fund_type, funds.fund_type),
                 last_updated = CURRENT_TIMESTAMP;
             """,
-            (fund_code, fund_title, fund_type, fund_code),
+            (clean_code, fund_title, fund_type, clean_code),
+        )
+        conn.execute(
+            """
+            INSERT INTO tracked_funds (fund_code, fund_title, fund_type, is_default, created_at, last_updated)
+            VALUES (?, ?, COALESCE(?, (SELECT fund_type FROM tracked_funds WHERE fund_code = ?)), 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(fund_code) DO UPDATE SET
+                fund_title = CASE
+                    WHEN excluded.fund_title LIKE '%Yatırım Fonu' AND tracked_funds.fund_title NOT LIKE '%Yatırım Fonu'
+                    THEN tracked_funds.fund_title
+                    ELSE excluded.fund_title
+                END,
+                fund_type = COALESCE(excluded.fund_type, tracked_funds.fund_type),
+                last_updated = CURRENT_TIMESTAMP;
+            """,
+            (clean_code, fund_title, fund_type, clean_code),
         )
         conn.commit()
 
@@ -653,9 +805,121 @@ def get_research_logs(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def seed_contact_messages(db_path: Optional[Path] = None) -> int:
+    """BÖLÜM 2: İletişim gelen kutusu boşsa başlangıç için örnek akademik ve teknik geri bildirim kayıtları ekler."""
+    with get_connection(db_path) as conn:
+        cnt = conn.execute("SELECT COUNT(*) as c FROM contact_messages;").fetchone()["c"]
+        if cnt > 0:
+            return int(cnt)
+        sample_msgs = [
+            (
+                "Dr. Öğr. Üyesi Selim Kaya",
+                "selim.kaya@universite.edu.tr",
+                "0532 418 72 90",
+                "Akademik İş Birliği",
+                "TÜBİTAK 2209-A projenizde geliştirdiğiniz 15 Kanıt Kartı ve 100 bazlı normalizasyon modülünü finansal okuryazarlık dersimizde vaka analizi olarak incelemek isteriz.",
+                1,
+                0,
+            ),
+            (
+                "Zeynep Demir",
+                "zeynep.demir@ornek.com",
+                "0544 812 35 14",
+                "Öneri & Geri Bildirim",
+                "Sanal sepet laboratuvarında AFT ve TTA fonlarını karşılaştırırken tatil günü çözümleyicinin otomatik devreye girmesi çok açıklayıcı olmuş, teşekkürler.",
+                1,
+                1,
+            ),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO contact_messages (
+                full_name, email, phone, subject, message, kvkk_approved, is_read
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);
+            """,
+            sample_msgs,
+        )
+        conn.commit()
+        return len(sample_msgs)
+
+
+def insert_contact_message(
+    full_name: str,
+    email: str,
+    phone: str,
+    subject: str,
+    message: str,
+    kvkk_approved: bool = True,
+    db_path: Optional[Path] = None,
+) -> int:
+    """Yeni bir iletişim mesajı kaydeder ve ID döndürür."""
+    with get_connection(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO contact_messages (
+                full_name, email, phone, subject, message, kvkk_approved, is_read, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP);
+            """,
+            (
+                full_name.strip(),
+                email.strip(),
+                phone.strip(),
+                subject.strip(),
+                message.strip(),
+                1 if kvkk_approved else 0,
+            ),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def get_contact_messages(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Tüm iletişim mesajlarını yeniden eskiye sıralı döndürür."""
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, full_name, email, phone, subject, message, kvkk_approved, is_read, created_at
+            FROM contact_messages
+            ORDER BY id DESC;
+            """
+        ).fetchall()
+    return [
+        {
+            **dict(r),
+            "kvkk_approved": bool(r["kvkk_approved"]),
+            "is_read": bool(r["is_read"]),
+        }
+        for r in rows
+    ]
+
+
+def set_contact_message_read(
+    msg_id: int, is_read: bool, db_path: Optional[Path] = None
+) -> bool:
+    """İletişim mesajının okundu/okunmadı durumunu günceller."""
+    with get_connection(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE contact_messages SET is_read = ? WHERE id = ?;",
+            (1 if is_read else 0, msg_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def delete_contact_message(msg_id: int, db_path: Optional[Path] = None) -> bool:
+    """İletişim mesajını siler."""
+    with get_connection(db_path) as conn:
+        cur = conn.execute("DELETE FROM contact_messages WHERE id = ?;", (msg_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
 if __name__ == "__main__":
     init_db()
+    seed_tracked_funds()
     seed_settings()
     seed_research_logs()
+    seed_contact_messages()
     print(f"Veritabanı başarıyla hazırlandı: {DB_PATH}")
+
 

@@ -9,7 +9,12 @@ import {
   ExternalLink,
   ArrowLeftRight,
 } from "lucide-react";
-import { apiFetch, formatCurrencyTL, formatNumberTR } from "@/lib/api";
+import {
+  apiFetch,
+  formatCurrencyTL,
+  formatNumberTR,
+  trackTelemetryEvent,
+} from "@/lib/api";
 
 export default function BulletinsPage() {
   const [fundsList, setFundsList] = useState<string[]>([
@@ -254,7 +259,19 @@ export default function BulletinsPage() {
               return (
                 <button
                   key={b.id}
-                  onClick={() => setSelectedBulletinId(b.id)}
+                  onClick={() => {
+                    setSelectedBulletinId(b.id);
+                    trackTelemetryEvent({
+                      event_type: "BULLETIN_OPEN",
+                      module_name: "bulletins",
+                      fund_code: b.fund_code || null,
+                      bulletin_id: b.id,
+                      metadata: {
+                        bulletin_title: b.title,
+                        institution: b.source_institution,
+                      },
+                    });
+                  }}
                   className={`w-full text-left p-4 rounded-xl border transition-all ${
                     active
                       ? "bg-blue-600 text-white border-blue-600 shadow-sm"
@@ -419,6 +436,18 @@ export default function BulletinsPage() {
                   href={summary.original_source_access?.original_url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => {
+                    trackTelemetryEvent({
+                      event_type: "BULLETIN_SOURCE_CLICK",
+                      module_name: "bulletins",
+                      fund_code: activeBulletin?.fund_code || null,
+                      bulletin_id: activeBulletin?.id,
+                      metadata: {
+                        bulletin_title: activeBulletin?.title,
+                        institution: activeBulletin?.source_institution,
+                      },
+                    });
+                  }}
                   className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Orijinal Resmi Kaynağı Görüntüle{" "}

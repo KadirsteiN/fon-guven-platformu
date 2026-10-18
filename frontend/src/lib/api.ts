@@ -104,3 +104,64 @@ export function formatNumberTR(
     maximumFractionDigits: decimals,
   }).format(val);
 }
+
+export function getTelemetrySessionId(): string {
+  if (typeof window === "undefined") return "ssr-session";
+  let sid = sessionStorage.getItem("fg_telemetry_session_id");
+  if (!sid) {
+    sid =
+      "sess-" +
+      Math.random().toString(36).substring(2, 9) +
+      "-" +
+      Date.now().toString(36);
+    sessionStorage.setItem("fg_telemetry_session_id", sid);
+  }
+  return sid;
+}
+
+export interface TelemetryEventPayload {
+  event_type:
+    | "PAGE_VIEW"
+    | "TIME_ON_PAGE"
+    | "EVIDENCE_INSPECT"
+    | "TRANSPARENCY_QUERY"
+    | "ANALYTICS_QUERY"
+    | "FUND_COMPARE"
+    | "BASKET_SIMULATE"
+    | "BULLETIN_OPEN"
+    | "BULLETIN_SOURCE_CLICK"
+    | "CONTACT_SUBMIT";
+  module_name: string;
+  fund_code?: string | null;
+  paired_fund_code?: string | null;
+  date_range_label?: string | null;
+  bulletin_id?: number | null;
+  duration_seconds?: number;
+  basket_weight_pct?: number | null;
+  metadata?: Record<string, any> | null;
+}
+
+export function trackTelemetryEvent(payload: TelemetryEventPayload): void {
+  if (typeof window === "undefined") return;
+  const session_id = getTelemetrySessionId();
+  const body = JSON.stringify({
+    session_id,
+    event_type: payload.event_type,
+    module_name: payload.module_name,
+    fund_code: payload.fund_code || null,
+    paired_fund_code: payload.paired_fund_code || null,
+    date_range_label: payload.date_range_label || null,
+    bulletin_id: payload.bulletin_id ?? null,
+    duration_seconds: payload.duration_seconds ?? 0,
+    basket_weight_pct: payload.basket_weight_pct ?? null,
+    metadata: payload.metadata || null,
+  });
+
+  fetch(`${API_BASE_URL}/api/telemetry/track`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {});
+}
+

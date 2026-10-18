@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   HelpCircle,
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, trackTelemetryEvent } from "@/lib/api";
 
 export default function EvidencePage() {
   const [cards, setCards] = useState<any[]>([]);
@@ -84,7 +84,17 @@ export default function EvidencePage() {
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedOrder(c.order_no)}
+                  onClick={() => {
+                    setSelectedOrder(c.order_no);
+                    trackTelemetryEvent({
+                      event_type: "EVIDENCE_INSPECT",
+                      module_name: "evidence",
+                      metadata: {
+                        order_no: c.order_no,
+                        question: c.question,
+                      },
+                    });
+                  }}
                   className={`w-full text-left p-3.5 rounded-xl border transition-all ${
                     isSelected
                       ? "bg-blue-600 text-white border-blue-600 shadow-sm"

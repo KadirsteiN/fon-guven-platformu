@@ -853,21 +853,18 @@ def discover_and_add_random_five_funds(
     count: int = 5,
 ) -> Dict[str, Any]:
     """
-    GÖREV 4: Keşif havuzunda (TEFAS_DISCOVERY_POOL) yer alan ancak henüz SQLite
-    veritabanımıza eklenmemiş olan gerçek TEFAS fonları arasından rastgele 5 tanesini
-    seçer ve son 1 yıllık (365 gün) gerçek tarihsel verilerini TEFAS API'den çekerek
-    veritabanına kaydeder.
+    GÖREV 4 & BÖLÜM 1: Keşif havuzunda (TEFAS_DISCOVERY_POOL) yer alan ancak henüz SQLite
+    veritabanımıza (veya fiyat serilerine) eklenmemiş olan gerçek TEFAS fonları arasından
+    rastgele 5 tanesini seçer ve son 1 yıllık (365 gün) gerçek tarihsel verilerini TEFAS API'den
+    çekerek veritabanına (mevcut fonları ASLA silmeden Upsert ile) kaydeder.
     """
     import random
     from database import get_connection, get_fund_stats
 
     with get_connection() as conn:
-        # 0 işlem günü olan olası eski kayıtları temizle
-        conn.execute(
-            "DELETE FROM funds WHERE fund_code NOT IN (SELECT DISTINCT fund_code FROM fund_prices);"
-        )
-        conn.commit()
-        existing_rows = conn.execute("SELECT fund_code FROM funds;").fetchall()
+        existing_rows = conn.execute(
+            "SELECT DISTINCT fund_code FROM fund_prices;"
+        ).fetchall()
         existing_codes = {str(r["fund_code"]).strip().upper() for r in existing_rows}
 
     candidate_codes = [
@@ -880,9 +877,7 @@ def discover_and_add_random_five_funds(
             "Özel fon kodu ekleme formundan istediğiniz başka bir TEFAS fon kodunu ekleyebilirsiniz."
         )
 
-    # Yedekli seçim: 5 fonun tamamında kesintisiz TEFAS verisi bulunduğunu garanti etmek için
-    # aday havuzundan 8 kodu sorgulayıp verisi doğrulanan ilk 5 fonu kaydederiz.
-    sample_size = min(count + 3, len(candidate_codes))
+    sample_size = min(count, len(candidate_codes))
     sampled_candidates = random.sample(candidate_codes, k=sample_size)
     sampled_map = {code: TEFAS_DISCOVERY_POOL[code] for code in sampled_candidates}
 
@@ -893,21 +888,10 @@ def discover_and_add_random_five_funds(
     )
 
     verified_codes: List[str] = []
-    unverified_codes: List[str] = []
     for code in sampled_candidates:
         st = get_fund_stats(code)
-        if st.get("total_days", 0) > 0 and len(verified_codes) < count:
+        if st.get("total_days", 0) > 0:
             verified_codes.append(code)
-        else:
-            unverified_codes.append(code)
-
-    # Fazladan çekilen veya 0 gün dönen adayları temizle ki tam olarak 5 yeni fon eklensin
-    if unverified_codes:
-        with get_connection() as conn:
-            for u_code in unverified_codes:
-                conn.execute("DELETE FROM fund_prices WHERE fund_code = ?;", (u_code,))
-                conn.execute("DELETE FROM funds WHERE fund_code = ?;", (u_code,))
-            conn.commit()
 
     added_details: List[Dict[str, Any]] = []
     total_saved_days = 0
@@ -936,5 +920,62 @@ def discover_and_add_random_five_funds(
         "remaining_discovery_pool_count": remaining_pool,
         "added_funds": added_details,
     }
+
+
+def ensure_fund_prices_exist(
+    fund_codes: List[str],
+    requested_start_date: Optional[str] = None,
+    requested_end_date: Optional[str] = None,
+    db_path: Optional[Path] = None,
+) -> List[str]:
+    """
+    BÖLÜM 1.4: /api/analytics/compare veya detay uç noktalarında bir fonun fiyat verisi eksikse
+    hata vermek yerine arka planda anında TEFAS'tan çekip veritabanına kaydeder.
+    """
+    from database import get_connection
+
+    cleaned = [c.strip().upper() for c in fund_codes if c and c.strip()]
+    if not cleaned:
+        return []
+
+    missing_codes: List[str] = []
+    with get_connection(db_path) as conn:
+        for code in cleaned:
+            if requested_start_date and requested_end_date:
+                row = conn.execute(
+                    """
+                    SELECT COUNT(*) as c FROM fund_prices
+                    WHERE fund_code = ? AND date >= ? AND date <= ?;
+                    """,
+                    (code, requested_start_date, requested_end_date),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) as c FROM fund_prices WHERE fund_code = ?;",
+                    (code,),
+                ).fetchone()
+
+            if not row or int(row["c"] or 0) == 0:
+                missing_codes.append(code)
+
+    if not missing_codes:
+        return []
+
+    fetched_codes: List[str] = []
+    for code in missing_codes:
+        f_type = TEFAS_DISCOVERY_POOL.get(code, "Yatırım Fonu")
+        try:
+            fetch_tefas_history_chunked(
+                fund_code=code,
+                total_days=365,
+                fund_type_label=f_type,
+                sleep_seconds=0.35,
+            )
+            fetched_codes.append(code)
+        except Exception:
+            pass
+
+    return fetched_codes
+
 
 

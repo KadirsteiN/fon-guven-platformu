@@ -16,6 +16,7 @@ from typing import Dict, Any, List, Optional
 
 from database import get_connection
 from analytics_engine import compute_risk_metrics_from_prices
+from tefas_fetcher import ensure_fund_prices_exist
 
 
 MANDATORY_LIMITATIONS_NOTICE = {
@@ -74,6 +75,8 @@ def simulate_virtual_basket(
 
     fund_codes = list(merged_allocs.keys())
     total_initial_amount = sum(merged_allocs.values())
+
+    ensure_fund_prices_exist(fund_codes, req_start, req_end, db_path=db_path)
 
     fund_meta_map: Dict[str, Dict[str, Any]] = {}
     fund_price_maps: Dict[str, Dict[str, float]] = {}

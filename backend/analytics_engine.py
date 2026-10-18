@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from database import get_connection
+from tefas_fetcher import ensure_fund_prices_exist
 
 TRADING_DAYS_PER_YEAR = 252
 
@@ -63,6 +64,30 @@ def resolve_trading_dates(
             """,
             (fund_code, req_start, req_end),
         ).fetchone()
+
+    if not start_row or not end_row:
+        ensure_fund_prices_exist([fund_code], req_start, req_end, db_path=db_path)
+        with get_connection(db_path) as conn:
+            start_row = conn.execute(
+                """
+                SELECT date, price, source
+                FROM fund_prices
+                WHERE fund_code = ? AND date >= ? AND date <= ?
+                ORDER BY date ASC
+                LIMIT 1
+                """,
+                (fund_code, req_start, req_end),
+            ).fetchone()
+            end_row = conn.execute(
+                """
+                SELECT date, price, source
+                FROM fund_prices
+                WHERE fund_code = ? AND date >= ? AND date <= ?
+                ORDER BY date DESC
+                LIMIT 1
+                """,
+                (fund_code, req_start, req_end),
+            ).fetchone()
 
     if not start_row or not end_row:
         raise ValueError(
@@ -247,6 +272,8 @@ def compare_funds_normalized(
 
     req_start = requested_start_date.strip()
     req_end = requested_end_date.strip()
+
+    ensure_fund_prices_exist(cleaned_codes, req_start, req_end, db_path=db_path)
 
     fund_price_maps: Dict[str, Dict[str, float]] = {}
     fund_Individual_summaries: List[Dict[str, Any]] = []

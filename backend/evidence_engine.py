@@ -826,9 +826,6 @@ def evaluate_fund_transparency(
             (code,),
         ).fetchone()
 
-        if not fund_row:
-            raise ValueError(f"[{code}] Fonu veritabanında bulunamadı.")
-
         stats_row = conn.execute(
             """
             SELECT
@@ -843,6 +840,32 @@ def evaluate_fund_transparency(
             (code,),
         ).fetchone()
 
+    if not fund_row or int(stats_row["total_days"] or 0) == 0:
+        from tefas_fetcher import ensure_fund_prices_exist
+        ensure_fund_prices_exist([code], db_path=db_path)
+        with get_connection(db_path) as conn:
+            fund_row = conn.execute(
+                "SELECT fund_code, fund_title, fund_type, last_updated FROM funds WHERE fund_code = ?;",
+                (code,),
+            ).fetchone()
+            stats_row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) as total_days,
+                    MIN(date) as min_date,
+                    MAX(date) as max_date,
+                    SUM(CASE WHEN investor_count IS NOT NULL AND investor_count > 0 THEN 1 ELSE 0 END) as inv_days,
+                    SUM(CASE WHEN total_value IS NOT NULL AND total_value > 0 THEN 1 ELSE 0 END) as val_days
+                FROM fund_prices
+                WHERE fund_code = ?;
+                """,
+                (code,),
+            ).fetchone()
+
+    if not fund_row:
+        raise ValueError(f"[{code}] Fonu veritabanında bulunamadı.")
+
+    with get_connection(db_path) as conn:
         bulletin_count = conn.execute(
             """
             SELECT COUNT(*) as c FROM bulletins

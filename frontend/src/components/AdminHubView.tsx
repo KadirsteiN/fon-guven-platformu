@@ -26,6 +26,13 @@ import {
   Shuffle,
   ExternalLink,
   Scale,
+  Inbox,
+  BarChart3,
+  Eye,
+  MailOpen,
+  Mail,
+  Activity,
+  X,
 } from "lucide-react";
 import {
   API_BASE_URL,
@@ -43,7 +50,9 @@ export type AdminTabKey =
   | "bulletins"
   | "funds"
   | "research"
-  | "legal";
+  | "legal"
+  | "inbox"
+  | "telemetry";
 
 export default function AdminHubView({
   initialTab = "overview",
@@ -140,6 +149,18 @@ export default function AdminHubView({
   const [rNotes, setRNotes] = useState("");
   const [researchFeedback, setResearchFeedback] = useState<string | null>(null);
 
+  // BÖLÜM 2: Gelen Mesajlar (İletişim) state
+  const [contactMessages, setContactMessages] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [selectedMessageModal, setSelectedMessageModal] = useState<any | null>(
+    null
+  );
+  const [inboxFeedback, setInboxFeedback] = useState<string | null>(null);
+
+  // BÖLÜM 3: Platform İstatistikleri & Davranış Analizi (Telemetri) state
+  const [telemetryData, setTelemetryData] = useState<any | null>(null);
+  const [loadingTelemetry, setLoadingTelemetry] = useState<boolean>(false);
+
   const loadAllAdminData = async () => {
     try {
       await adminFetch("/api/admin/verify");
@@ -149,17 +170,29 @@ export default function AdminHubView({
       return;
     }
 
-    const [syncRes, setRes, splashRes, legalRes, fRes, bRes, rRes, discRes] =
-      await Promise.all([
-        apiFetch<any>("/api/public/sync-status").catch(() => null),
-        apiFetch<any>("/api/public/settings").catch(() => null),
-        apiFetch<any>("/api/public/splash-settings").catch(() => null),
-        apiFetch<any>("/api/public/legal-texts").catch(() => null),
-        apiFetch<any>("/api/funds").catch(() => null),
-        apiFetch<any>("/api/bulletins").catch(() => null),
-        adminFetch<any>("/api/admin/research/metrics").catch(() => null),
-        adminFetch<any>("/api/admin/bulletins/discover").catch(() => null),
-      ]);
+    const [
+      syncRes,
+      setRes,
+      splashRes,
+      legalRes,
+      fRes,
+      bRes,
+      rRes,
+      discRes,
+      inboxRes,
+      telemRes,
+    ] = await Promise.all([
+      apiFetch<any>("/api/public/sync-status").catch(() => null),
+      apiFetch<any>("/api/public/settings").catch(() => null),
+      apiFetch<any>("/api/public/splash-settings").catch(() => null),
+      apiFetch<any>("/api/public/legal-texts").catch(() => null),
+      apiFetch<any>("/api/funds").catch(() => null),
+      apiFetch<any>("/api/bulletins").catch(() => null),
+      adminFetch<any>("/api/admin/research/metrics").catch(() => null),
+      adminFetch<any>("/api/admin/bulletins/discover").catch(() => null),
+      adminFetch<any>("/api/admin/contact-messages").catch(() => null),
+      adminFetch<any>("/api/admin/telemetry/dashboard").catch(() => null),
+    ]);
 
     if (syncRes) setSyncData(syncRes);
     if (setRes) {
@@ -172,7 +205,10 @@ export default function AdminHubView({
     if (splashRes) {
       setSplashEnabled(splashRes.splash_enabled !== false);
       setSplashDurationMs(Number(splashRes.splash_duration_ms || 2200));
-      if (Array.isArray(splashRes.splash_quotes) && splashRes.splash_quotes.length > 0) {
+      if (
+        Array.isArray(splashRes.splash_quotes) &&
+        splashRes.splash_quotes.length > 0
+      ) {
         setSplashQuotes(splashRes.splash_quotes);
       }
     }
@@ -194,6 +230,11 @@ export default function AdminHubView({
     if (bRes?.bulletins) setBulletinsList(bRes.bulletins);
     if (rRes) setResearchData(rRes);
     if (discRes?.candidates) setDiscoveredBulletins(discRes.candidates);
+    if (inboxRes?.messages) {
+      setContactMessages(inboxRes.messages);
+      setUnreadCount(Number(inboxRes.unread_count || 0));
+    }
+    if (telemRes) setTelemetryData(telemRes);
   };
 
   useEffect(() => {
@@ -662,6 +703,79 @@ export default function AdminHubView({
     );
   };
 
+  // --- BÖLÜM 2: Gelen Mesajlar (İletişim) İşlemleri ---
+  const refreshInbox = async () => {
+    const inboxRes = await adminFetch<any>("/api/admin/contact-messages").catch(
+      () => null
+    );
+    if (inboxRes?.messages) {
+      setContactMessages(inboxRes.messages);
+      setUnreadCount(Number(inboxRes.unread_count || 0));
+    }
+  };
+
+  const handleToggleMessageRead = async (msg: any) => {
+    setInboxFeedback(null);
+    const nextRead = !msg.is_read;
+    try {
+      await adminFetch(`/api/admin/contact-messages/${msg.id}/read`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_read: nextRead }),
+      });
+      if (selectedMessageModal && selectedMessageModal.id === msg.id) {
+        setSelectedMessageModal({ ...selectedMessageModal, is_read: nextRead });
+      }
+      await refreshInbox();
+    } catch (err: any) {
+      setInboxFeedback(`Durum güncellenemedi: ${err.message}`);
+    }
+  };
+
+  const handleOpenMessageModal = async (msg: any) => {
+    setSelectedMessageModal(msg);
+    if (!msg.is_read) {
+      try {
+        await adminFetch(`/api/admin/contact-messages/${msg.id}/read`, {
+          method: "PATCH",
+          body: JSON.stringify({ is_read: true }),
+        });
+        setSelectedMessageModal({ ...msg, is_read: true });
+        await refreshInbox();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleDeleteContactMessage = async (msgId: number) => {
+    setInboxFeedback(null);
+    try {
+      await adminFetch(`/api/admin/contact-messages/${msgId}`, {
+        method: "DELETE",
+      });
+      if (selectedMessageModal && selectedMessageModal.id === msgId) {
+        setSelectedMessageModal(null);
+      }
+      setInboxFeedback(`#${msgId} numaralı iletişim mesajı kalıcı olarak silindi.`);
+      await refreshInbox();
+    } catch (err: any) {
+      setInboxFeedback(`Silme hatası: ${err.message}`);
+    }
+  };
+
+  // --- BÖLÜM 3: Telemetri ve Kullanıcı Davranış Analizi Yenileme ---
+  const handleRefreshTelemetry = async () => {
+    setLoadingTelemetry(true);
+    try {
+      const telemRes = await adminFetch<any>("/api/admin/telemetry/dashboard");
+      if (telemRes) setTelemetryData(telemRes);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingTelemetry(false);
+    }
+  };
+
   if (!authChecked) {
     return (
       <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm text-slate-500">
@@ -681,7 +795,7 @@ export default function AdminHubView({
               TÜBİTAK 2209-A • Tam Yetkili Yönetici Kontrol Merkezi (Admin Hub)
             </span>
             <h2 className="text-xl font-bold">
-              Sistem, Otomatik Senkronizasyon, Bülten Keşif ve Araştırma Yönetimi
+              Sistem, Otomatik Senkronizasyon, Bülten Keşif, İletişim ve Telemetri Yönetimi
             </h2>
           </div>
 
@@ -694,7 +808,7 @@ export default function AdminHubView({
           </button>
         </div>
 
-        {/* 5 Sekme Menüsü */}
+        {/* 8 Sekme Menüsü */}
         <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           {[
             {
@@ -726,6 +840,18 @@ export default function AdminHubView({
               key: "legal" as AdminTabKey,
               label: "6. Yasal Metinler & Sözleşmeler",
               icon: Scale,
+            },
+            {
+              key: "inbox" as AdminTabKey,
+              label: `7. Gelen Mesajlar (İletişim)${
+                unreadCount > 0 ? ` (${unreadCount} Yeni)` : ""
+              }`,
+              icon: Inbox,
+            },
+            {
+              key: "telemetry" as AdminTabKey,
+              label: "8. Platform İstatistikleri & Davranış Analizi",
+              icon: BarChart3,
             },
           ].map((t) => {
             const Icon = t.icon;
@@ -2678,6 +2804,693 @@ export default function AdminHubView({
           </form>
         </div>
       )}
+
+      {/* SEKME 7: GELEN MESAJLAR (İLETİŞİM & GERİ BİLDİRİM) */}
+      {activeTab === "inbox" && (
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1.5">
+                <Inbox className="w-3.5 h-3.5" />
+                Akademik İş Birliği, Veri Hatası & Kullanıcı Geri Bildirim Kutusu
+              </div>
+              <h3 className="text-base font-bold">
+                Gelen İletişim Mesajları (`contact_messages`)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                `/contact` sayfasından KVKK açık rıza onayıyla gönderilen tüm mesajları buradan okuyabilir, okundu/okunmadı olarak işaretleyebilir veya silebilirsiniz.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+                Toplam: {contactMessages.length} • Okunmamış: {unreadCount}
+              </span>
+              <button
+                type="button"
+                onClick={refreshInbox}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold inline-flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Yenile
+              </button>
+            </div>
+          </div>
+
+          {inboxFeedback && (
+            <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200 font-medium">
+              {inboxFeedback}
+            </div>
+          )}
+
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                  <th className="p-3 font-bold">Durum</th>
+                  <th className="p-3 font-bold">Tarih</th>
+                  <th className="p-3 font-bold">Ad Soyad</th>
+                  <th className="p-3 font-bold">İletişim (E-posta / Tel)</th>
+                  <th className="p-3 font-bold">Konu</th>
+                  <th className="p-3 font-bold">Mesaj Özeti</th>
+                  <th className="p-3 font-bold">KVKK Onayı</th>
+                  <th className="p-3 font-bold text-right">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {contactMessages.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-6 text-center text-slate-500">
+                      Henüz gelen iletişim mesajı bulunmuyor.
+                    </td>
+                  </tr>
+                ) : (
+                  contactMessages.map((msg) => (
+                    <tr
+                      key={msg.id}
+                      className={`transition-colors ${
+                        msg.is_read
+                          ? "bg-white dark:bg-slate-900"
+                          : "bg-blue-50/40 dark:bg-blue-950/20 font-medium"
+                      }`}
+                    >
+                      <td className="p-3">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            msg.is_read
+                              ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              : "bg-blue-600 text-white"
+                          }`}
+                        >
+                          {msg.is_read ? (
+                            <>
+                              <MailOpen className="w-3 h-3" /> Okundu
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="w-3 h-3" /> Yeni
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="p-3 whitespace-nowrap font-mono text-[11px] text-slate-500">
+                        {msg.created_at}
+                      </td>
+                      <td className="p-3 font-bold text-slate-900 dark:text-white">
+                        {msg.full_name}
+                      </td>
+                      <td className="p-3">
+                        <div className="text-slate-800 dark:text-slate-200">
+                          {msg.email}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-500">
+                          {msg.phone}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-[11px]">
+                          {msg.subject}
+                        </span>
+                      </td>
+                      <td className="p-3 max-w-xs truncate text-slate-600 dark:text-slate-300">
+                        {msg.message}
+                      </td>
+                      <td className="p-3">
+                        {msg.kvkk_approved ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
+                            ✓ Onaylı (6698 KVKK)
+                          </span>
+                        ) : (
+                          <span className="text-rose-500 text-[11px]">Hayır</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right whitespace-nowrap space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenMessageModal(msg)}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" />
+                          Detay Gör
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMessageRead(msg)}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold"
+                        >
+                          {msg.is_read ? "Okunmadı Yap" : "Okundu Yap"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteContactMessage(msg.id)}
+                          className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-semibold inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Sil
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mesaj Detay Modalı */}
+          {selectedMessageModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
+                  <div>
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                      {selectedMessageModal.subject}
+                    </span>
+                    <h4 className="mt-1.5 text-base font-bold text-slate-900 dark:text-white">
+                      {selectedMessageModal.full_name}
+                    </h4>
+                    <div className="text-xs text-slate-500 font-mono">
+                      Gönderim Tarihi: {selectedMessageModal.created_at}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMessageModal(null)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">
+                      E-posta Adresi
+                    </div>
+                    <div className="font-semibold text-slate-900 dark:text-white mt-0.5">
+                      {selectedMessageModal.email}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">
+                      Cep Telefonu
+                    </div>
+                    <div className="font-mono font-semibold text-slate-900 dark:text-white mt-0.5">
+                      {selectedMessageModal.phone}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-xs leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                  {selectedMessageModal.message}
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                    ✓ 6698 Sayılı KVKK Açık Rıza Onayı Alınmıştır
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMessageRead(selectedMessageModal)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 font-semibold"
+                    >
+                      {selectedMessageModal.is_read
+                        ? "Okunmadı Olarak İşaretle"
+                        : "Okundu Olarak İşaretle"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDeleteContactMessage(selectedMessageModal.id)
+                      }
+                      className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                    >
+                      Mesajı Sil
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMessageModal(null)}
+                      className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                    >
+                      Kapat
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SEKME 8: PLATFORM İSTATİSTİKLERİ & KULLANICI DAVRANIŞ ANALİZİ (TELEMETRİ ENGINE) */}
+      {activeTab === "telemetry" && (
+        <div className="space-y-6">
+          {/* Üst Özet Kartları */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full mb-1.5">
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  BÖLÜM 3 • Ultra Detaylı Kullanıcı Davranışı ve Fon Telemetri Sistemi
+                </div>
+                <h3 className="text-base font-bold">
+                  Platform İstatistikleri, Fon Etkileşim Matrisi & Canlı Kullanıcı Akışı
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Kullanıcıların KVKK uyumlu (anonim oturumlarla) hangi modülde ne kadar vakit geçirdiği, hangi fonları incelediği, karşılaştırdığı ve sepete eklediği gerçek zamanlı olarak raporlanır.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshTelemetry}
+                disabled={loadingTelemetry}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 self-start shrink-0"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${
+                    loadingTelemetry ? "animate-spin" : ""
+                  }`}
+                />
+                {loadingTelemetry ? "Yenileniyor..." : "Canlı Verileri Yenile"}
+              </button>
+            </div>
+
+            {telemetryData?.summary && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[11px] text-slate-500 font-semibold">
+                    Toplam Etkileşim / Olay
+                  </div>
+                  <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-1">
+                    {telemetryData.summary.total_events}
+                  </div>
+                  <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                    {telemetryData.summary.unique_sessions} Tekil Anonim Oturum
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[11px] text-slate-500 font-semibold">
+                    Toplam Platformda Kalma Süresi
+                  </div>
+                  <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+                    {telemetryData.summary.total_duration_minutes} dk
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    ({telemetryData.summary.total_duration_seconds} saniye)
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[11px] text-slate-500 font-semibold">
+                    Toplam Fon İnceleme & Sorgu
+                  </div>
+                  <div className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
+                    {telemetryData.summary.total_fund_interactions}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    {telemetryData.summary.total_comparisons} İkili Karşılaştırma
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[11px] text-slate-500 font-semibold">
+                    Sepet Simülasyonu & Bülten Okuma
+                  </div>
+                  <div className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+                    {telemetryData.summary.total_basket_simulations} Sepet /{" "}
+                    {telemetryData.summary.total_bulletin_interactions} Bülten
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    Aktif Senaryo & Belge Analizi
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 1. Modül ve Sayfa Bazlı İstatistikler */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                1. Modül ve Sayfa Bazlı İstatistikler (Hit & Sayfada Kalma Süresi)
+              </h4>
+              <p className="text-xs text-slate-500">
+                Ana Sayfa, Güven & Kanıt Merkezi, Şeffaflık Kontrolü, Bültenler, Performans Analizi, Sanal Sepet ve İletişim modüllerinin toplam görüntülenme ve ortalama inceleme süreleri.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                    <th className="p-3 font-bold">Modül / Sayfa Adı</th>
+                    <th className="p-3 font-bold">Yol (Route)</th>
+                    <th className="p-3 font-bold text-right">
+                      Toplam Görüntülenme / Hit
+                    </th>
+                    <th className="p-3 font-bold text-right">Tekil Oturum</th>
+                    <th className="p-3 font-bold text-right">
+                      Toplam Geçirilen Süre
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Ortalama Kalma Süresi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {(telemetryData?.module_stats || []).map((m: any) => (
+                    <tr key={m.module_key}>
+                      <td className="p-3 font-bold text-slate-900 dark:text-white">
+                        {m.module_label}
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-blue-600 dark:text-blue-400">
+                        {m.route_path}
+                      </td>
+                      <td className="p-3 text-right font-bold">
+                        {m.total_views} kez
+                      </td>
+                      <td className="p-3 text-right">{m.unique_sessions}</td>
+                      <td className="p-3 text-right font-mono text-emerald-700 dark:text-emerald-400 font-semibold">
+                        {m.total_duration_minutes} dk ({m.total_duration_seconds} sn)
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold">
+                        {m.avg_duration_seconds} sn
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 2. Fon Bazlı Ayrı Ayrı Detaylı İstatistikler ("Fon Etkileşim Matrisi") */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                2. Fon Bazlı Ayrı Ayrı Detaylı İstatistikler (&ldquo;Fon Etkileşim Matrisi&rdquo;)
+              </h4>
+              <p className="text-xs text-slate-500">
+                Takip edilen her bir fon (`AFT`, `TTE`, `YAY`, `TI2`, `IPB`, `MAC`, `TTA` vb.) için ayrı ayrı modül bazında sorgulanma sayıları, sanal sepete eklenme sıklığı, ortalama sepet ağırlığı (%) ve fon üzerinde geçirilen süre.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                    <th className="p-3 font-bold">Fon Kodu</th>
+                    <th className="p-3 font-bold">Fon Ünvanı & Türü</th>
+                    <th className="p-3 font-bold text-right">
+                      Toplam İncelenme
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Güven & Kanıt (`/evidence`)
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Şeffaflık Sorgusu (`/transparency`)
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Performans & Grafik (`/analytics`)
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Sanal Sepet Eklenme & Ort. Ağırlık %
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Fon Üzerinde Geçirilen Süre
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {(telemetryData?.fund_matrix || []).map((f: any) => (
+                    <tr key={f.fund_code}>
+                      <td className="p-3">
+                        <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-mono font-bold text-xs">
+                          {f.fund_code}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-900 dark:text-white">
+                          {f.fund_title}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {f.fund_type}
+                        </div>
+                      </td>
+                      <td className="p-3 text-right font-extrabold text-blue-600 dark:text-blue-400">
+                        {f.total_inspections}
+                      </td>
+                      <td className="p-3 text-right font-semibold">
+                        {f.evidence_views}
+                      </td>
+                      <td className="p-3 text-right font-semibold">
+                        {f.transparency_queries}
+                      </td>
+                      <td className="p-3 text-right font-semibold">
+                        {f.analytics_queries}
+                      </td>
+                      <td className="p-3 text-right">
+                        <span className="font-bold">{f.basket_additions} kez</span>{" "}
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">
+                          (Ort. %{formatNumberTR(f.avg_basket_weight_pct, 1)})
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-mono">
+                        <span className="font-bold">
+                          {f.total_duration_seconds} sn
+                        </span>{" "}
+                        <span className="text-[11px] text-slate-500">
+                          (Ort. {f.avg_duration_seconds} sn)
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 3. Karşılaştırma & Çapraz Analiz İstatistikleri */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* En Çok Karşılaştırılan İkili Fon Çiftleri Liderlik Tablosu */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  3A. En Çok Karşılaştırılan İkili Fon Çiftleri (Top Pairings)
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Kullanıcıların 100 bazlı performans analizinde en sık yan yana karşılaştırdığı fon ikilileri.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {(telemetryData?.comparison_stats?.top_pairings || []).map(
+                  (pair: any, idx: number) => (
+                    <div
+                      key={pair.pair_label}
+                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                            {pair.pair_label}
+                          </span>
+                        </div>
+                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                          {pair.compare_count} karşılaştırma (%{pair.share_pct})
+                        </span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full bg-blue-600 rounded-full"
+                          style={{
+                            width: `${Math.min(100, Math.max(8, pair.share_pct))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* En Çok Sorgulanan Tarih Aralıkları */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  3B. En Çok Sorgulanan Tarih Aralıkları Dağılımı
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Performans ve sepet analizlerinde kullanıcıların tercih ettiği dönem periyotları (`1 Ay`, `3 Ay`, `6 Ay`, `1 Yıl`, `Özel Tarih`).
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {(
+                  telemetryData?.comparison_stats?.date_range_breakdown || []
+                ).map((rng: any) => (
+                  <div
+                    key={rng.range_label}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {rng.range_label}
+                      </span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {rng.query_count} sorgu (%{rng.share_pct})
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-600 rounded-full"
+                        style={{
+                          width: `${Math.min(100, Math.max(6, rng.share_pct))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Bülten & Rapor İstatistikleri */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                4. Bülten & Rapor Okunma İstatistikleri
+              </h4>
+              <p className="text-xs text-slate-500">
+                En çok okunan/incelenen KAP bültenleri, resmi kaynak PDF tıklama sayıları ve bülten üzerinde geçirilen süreler.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                    <th className="p-3 font-bold">Fon</th>
+                    <th className="p-3 font-bold">Bülten / Rapor Başlığı</th>
+                    <th className="p-3 font-bold">Kurum</th>
+                    <th className="p-3 font-bold text-right">
+                      Özet Açılma Sayısı
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Resmi Kaynak / PDF Tıklama
+                    </th>
+                    <th className="p-3 font-bold text-right">
+                      Ortalama Okuma Süresi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {(telemetryData?.bulletin_stats || []).map((b: any) => (
+                    <tr key={b.bulletin_id}>
+                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {b.fund_code || "GENEL"}
+                      </td>
+                      <td className="p-3 font-bold text-slate-900 dark:text-white">
+                        {b.title}
+                      </td>
+                      <td className="p-3 text-slate-500">{b.institution}</td>
+                      <td className="p-3 text-right font-bold">
+                        {b.open_count} kez
+                      </td>
+                      <td className="p-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                        {b.source_click_count} tıklama
+                      </td>
+                      <td className="p-3 text-right font-mono">
+                        {b.avg_duration_seconds} sn (Top.{" "}
+                        {b.total_duration_seconds} sn)
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 5. Zaman Serisi ve Canlı Akış (Live Activity Feed - Son 50 Anonim Hareket) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Sol: Günlük Etkileşim Trendi */}
+            <div className="lg:col-span-5 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  5A. Günlük Etkileşim Zaman Serisi
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Tarih bazında toplam etkileşim, fon sorgusu ve sepet simülasyonu dağılımı.
+                </p>
+              </div>
+
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                {(telemetryData?.daily_trend || []).map((dt: any) => (
+                  <div
+                    key={dt.date}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="font-mono text-slate-700 dark:text-slate-200">
+                        {dt.date}
+                      </span>
+                      <span className="text-blue-600 dark:text-blue-400">
+                        {dt.total_events} etkileşim
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Sayfa: {dt.page_views}</span>
+                      <span>Fon Analizi: {dt.fund_queries}</span>
+                      <span>Sepet: {dt.basket_simulations}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sağ: Canlı Akış (Live Activity Feed - Son 50 Anonim Kullanıcı Hareketi) */}
+            <div className="lg:col-span-7 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <Activity className="w-4 h-4 text-emerald-500" />
+                    5B. Canlı Akış (Son 50 Anonim Kullanıcı Hareketi)
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    KVKK uyumlu anonim oturumların platform üzerindeki gerçek zamanlı işlem geçmişi.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {(telemetryData?.live_feed || []).map((ev: any) => (
+                  <div
+                    key={ev.id}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-semibold text-slate-800 dark:text-slate-100">
+                        {ev.description_tr}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-400">
+                        Oturum: {ev.session_id} • Tür: {ev.event_type} •{" "}
+                        {ev.created_at}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold text-[10px] whitespace-nowrap shrink-0">
+                      {ev.relative_time_tr}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
