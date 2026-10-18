@@ -190,9 +190,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_origin_regex=".*",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Statik Yüklemeler Klasörü (/uploads)
@@ -353,6 +355,7 @@ class ResearchLogCreateRequest(BaseModel):
 
 # --- GENEL (PUBLIC) SİSTEM & SENKRONİZASYON UÇ NOKTALARI ---
 
+@app.get("/")
 @app.get("/api/health")
 def api_health() -> Dict[str, Any]:
     """Veritabanı ve gerçek TEFAS veri güncelliği durumunu döndürür."""
