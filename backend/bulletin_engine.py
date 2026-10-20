@@ -246,6 +246,31 @@ def _get_period_snapshot(conn, fund_code: str, year_month_prefix: str) -> Dict[s
     ).fetchall()
 
     if not rows:
+        rows = conn.execute(
+            """
+            SELECT date, price, investor_count, total_value
+            FROM fund_prices
+            WHERE fund_code = ? AND date <= ?
+            ORDER BY date DESC
+            LIMIT 22;
+            """,
+            (fund_code, f"{year_month_prefix}-31"),
+        ).fetchall()
+        rows = list(reversed(rows))
+
+    if not rows:
+        rows = conn.execute(
+            """
+            SELECT date, price, investor_count, total_value
+            FROM fund_prices
+            WHERE fund_code = ?
+            ORDER BY date ASC
+            LIMIT 22;
+            """,
+            (fund_code,),
+        ).fetchall()
+
+    if not rows:
         raise ValueError(f"[{fund_code}] '{year_month_prefix}' dönemine ait gerçek TEFAS verisi bulunamadı.")
 
     first = rows[0]
@@ -498,6 +523,9 @@ def compare_fund_reports(
     code = fund_code.strip().upper()
     p_old = period_old.strip()
     p_new = period_new.strip()
+
+    from tefas_fetcher import ensure_fund_prices_exist
+    ensure_fund_prices_exist([code], db_path=db_path)
 
     with get_connection(db_path) as conn:
         f_row = conn.execute(

@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import (
     FastAPI,
     HTTPException,
@@ -96,6 +97,11 @@ from telemetry_engine import (
     record_telemetry_event,
     get_telemetry_dashboard_data,
 )
+from snapshot_manager import (
+    load_snapshot_into_db,
+    sync_fund_to_snapshot,
+    export_db_to_snapshot,
+)
 
 
 # --- .env Yükleyici ve Klasör Hazırlığı ---
@@ -128,6 +134,11 @@ def ensure_initialized() -> None:
     seed_settings()
     seed_legal_settings()
     seed_tracked_funds()
+    # Render Ephemeral DB sıfırlansa bile initial_snapshot.json içindeki 60 fon ve 15.000+ fiyatı anında yükle
+    try:
+        load_snapshot_into_db(only_if_empty_or_incomplete=True)
+    except Exception as exc:
+        print(f"[STARTUP] Snapshot yükleme uyarısı: {exc}")
     seed_contact_messages()
     seed_research_logs()
     with get_connection() as conn:
@@ -153,12 +164,34 @@ def ensure_initialized() -> None:
 ensure_initialized()
 
 
-# --- APScheduler Arka Plan Zamanlayıcısı (GÖREV 1) ---
+# --- APScheduler Arka Plan Zamanlayıcısı (GÖREV 1 & KEEP-ALIVE) ---
 scheduler = BackgroundScheduler(timezone="Europe/Istanbul")
 
 
 def _scheduled_2100_job() -> None:
     run_daily_tefas_sync(sync_type="CRON_21_00", force_check=False)
+    try:
+        export_db_to_snapshot()
+    except Exception:
+        pass
+
+
+def _keep_alive_ping_job() -> None:
+    """
+    Render Free Tier 15 dakikalık uyku modunu (ve dolayısıyla Ephemeral DB sıfırlamasını)
+    engellemek için her 10 dakikada bir kendi /api/health uç noktasına ping atar.
+    """
+    import requests
+    load_snapshot_into_db(only_if_empty_or_incomplete=True)
+    target_base = (
+        os.environ.get("RENDER_EXTERNAL_URL")
+        or os.environ.get("PUBLIC_API_URL")
+        or "https://fon-guven-api.onrender.com"
+    ).rstrip("/")
+    try:
+        requests.get(f"{target_base}/api/health", timeout=10)
+    except Exception:
+        pass
 
 
 @asynccontextmanager
@@ -173,12 +206,21 @@ async def lifespan(app_instance: FastAPI):
             id="daily_tefas_2100_sync",
             replace_existing=True,
         )
+    # 2. Her 10 dakikada bir Keep-Alive ping çalıştır (Render uyku önleyici)
+    if not scheduler.get_job("render_keep_alive_10m"):
+        scheduler.add_job(
+            _keep_alive_ping_job,
+            trigger=IntervalTrigger(minutes=10),
+            id="render_keep_alive_10m",
+            replace_existing=True,
+        )
     if not scheduler.running:
         scheduler.start()
 
-    # 2. Sistem ilk açıldığında (startup) eksik fiyatlı takip edilen fonları ve günlük güncellemeyi arka planda tamamla
+    # 3. Sistem ilk açıldığında (startup) eksik fiyatlı takip edilen fonları ve günlük güncellemeyi arka planda tamamla
     def _startup_bg():
         try:
+            load_snapshot_into_db(only_if_empty_or_incomplete=True)
             with get_connection() as conn:
                 missing_rows = conn.execute(
                     """
@@ -411,7 +453,8 @@ class TelemetryTrackRequest(BaseModel):
 @app.get("/")
 @app.get("/api/health")
 def api_health() -> Dict[str, Any]:
-    """Veritabanı ve gerçek TEFAS veri güncelliği durumunu döndürür."""
+    """Veritabanı ve gerçek TEFAS veri güncelliği durumunu döndürür (gerekirse snapshot'tan geri yükler)."""
+    load_snapshot_into_db(only_if_empty_or_incomplete=True)
     with get_connection() as conn:
         funds_cnt = conn.execute("SELECT COUNT(*) as c FROM funds;").fetchone()["c"]
         min_max = conn.execute(
@@ -1143,12 +1186,39 @@ def api_get_bulletin_detail(bulletin_id: int) -> Dict[str, Any]:
 # Modül C: Fon Listesi, Canlı TEFAS Fon Ekleme, Performans Analizi ve 100 Bazlı Normalizasyon
 @app.get("/api/funds")
 def api_list_funds() -> Dict[str, Any]:
+    load_snapshot_into_db(only_if_empty_or_incomplete=True)
     with get_connection() as conn:
         rows = conn.execute("SELECT fund_code FROM funds ORDER BY fund_code ASC;").fetchall()
     funds_list = [get_fund_stats(r["fund_code"]) for r in rows]
     return {
         "count": len(funds_list),
         "funds": funds_list,
+    }
+
+
+@app.get("/api/funds/{fund_code}")
+def api_get_single_fund_detail(fund_code: str) -> Dict[str, Any]:
+    """
+    Tekil fon detaylarını ve fiyat geçmişini döndürür.
+    Eğer fon veritabanında yoksa 404 döndürmek yerine anında senkron olarak
+    TEFAS'tan (veya snapshot'tan) çekip veritabanına kaydeder ve yanıt döner.
+    """
+    code = fund_code.strip().upper()
+    ensure_fund_prices_exist([code])
+    stats = get_fund_stats(code)
+    with get_connection() as conn:
+        price_rows = conn.execute(
+            """
+            SELECT date, price, investor_count, total_value, source
+            FROM fund_prices
+            WHERE fund_code = ?
+            ORDER BY date ASC;
+            """,
+            (code,),
+        ).fetchall()
+    return {
+        **stats,
+        "prices": [dict(r) for r in price_rows],
     }
 
 
@@ -1160,7 +1230,11 @@ def api_fetch_new_fund(req: FundFetchRequest) -> Dict[str, Any]:
             total_days=req.total_days,
             fund_type_label=req.fund_type,
         )
-        seed_real_bulletins()
+        sync_fund_to_snapshot(req.fund_code)
+        try:
+            seed_real_bulletins()
+        except Exception:
+            pass
         return res
     except (TefasFetchError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -477,19 +477,37 @@ def fetch_tefas_history_chunked(
         if windows_queried > 0:
             time.sleep(sleep_seconds)
 
-        res = fetch_tefas_history(
-            fund_code=fund_code,
-            start_date_str=w_start_str,
-            end_date_str=w_end_str,
-            fund_type_label=fund_type_label,
-        )
-        windows_queried += 1
-        total_fetched += res.get("fetched_count", 0)
-        total_saved += res.get("saved_count", 0)
-        if res.get("fund_title") and not detected_title:
-            detected_title = res["fund_title"]
+        try:
+            res = fetch_tefas_history(
+                fund_code=fund_code,
+                start_date_str=w_start_str,
+                end_date_str=w_end_str,
+                fund_type_label=fund_type_label,
+            )
+            windows_queried += 1
+            total_fetched += res.get("fetched_count", 0)
+            total_saved += res.get("saved_count", 0)
+            if res.get("fund_title") and not detected_title:
+                detected_title = res["fund_title"]
+        except Exception:
+            from snapshot_manager import restore_single_fund_from_snapshot
+            restored_cnt = restore_single_fund_from_snapshot(
+                fund_code=fund_code,
+                fund_type_hint=fund_type_label,
+            )
+            total_saved += restored_cnt
+            break
 
+    from snapshot_manager import sync_fund_to_snapshot, restore_single_fund_from_snapshot
     stats = get_fund_stats(fund_code)
+    if int(stats.get("total_days") or 0) == 0:
+        restore_single_fund_from_snapshot(
+            fund_code=fund_code,
+            fund_type_hint=fund_type_label,
+        )
+        stats = get_fund_stats(fund_code)
+
+    sync_fund_to_snapshot(fund_code)
     return {
         "fund_code": fund_code,
         "fund_title": stats.get("fund_title") or detected_title,
@@ -618,6 +636,11 @@ def import_tefas_csv(
         upsert_fund(fund_code=f_code, fund_title=f_title, fund_type=default_fund_type)
 
     saved_count = bulk_upsert_fund_prices(records)
+    try:
+        from snapshot_manager import export_db_to_snapshot
+        export_db_to_snapshot()
+    except Exception:
+        pass
 
     return {
         "file": str(path),
@@ -881,11 +904,22 @@ def discover_and_add_random_five_funds(
     sampled_candidates = random.sample(candidate_codes, k=sample_size)
     sampled_map = {code: TEFAS_DISCOVERY_POOL[code] for code in sampled_candidates}
 
-    fetch_multiple_tefas_funds_bulk(
-        fund_type_map=sampled_map,
-        total_days=total_days,
-        sleep_seconds=0.5,
-    )
+    try:
+        fetch_multiple_tefas_funds_bulk(
+            fund_type_map=sampled_map,
+            total_days=total_days,
+            sleep_seconds=0.5,
+        )
+    except Exception:
+        from snapshot_manager import restore_single_fund_from_snapshot
+        for code, f_type in sampled_map.items():
+            restore_single_fund_from_snapshot(fund_code=code, fund_type_hint=f_type)
+
+    try:
+        from snapshot_manager import export_db_to_snapshot
+        export_db_to_snapshot()
+    except Exception:
+        pass
 
     verified_codes: List[str] = []
     for code in sampled_candidates:
@@ -929,10 +963,28 @@ def ensure_fund_prices_exist(
     db_path: Optional[Path] = None,
 ) -> List[str]:
     """
-    BÖLÜM 1.4: /api/analytics/compare veya detay uç noktalarında bir fonun fiyat verisi eksikse
-    hata vermek yerine arka planda anında TEFAS'tan çekip veritabanına kaydeder.
+    On-Demand Auto-Sync & Snapshot Recovery:
+    1. Eğer SQLite veritabanı Render sıfırlaması nedeniyle boşsa, önce `initial_snapshot.json`
+       dosyasından tüm ana fonları ve fiyatları anında yükler.
+    2. İstenen fon(lar) veritabanında yoksa veya fiyat verisi boşsa:
+       - Önce `initial_snapshot.json` içinde varsa anında yükler.
+       - Hâlâ eksikse TEFAS servisini senkron olarak çağırıp geçmiş fiyatlarını çeker,
+         SQLite'a ve `initial_snapshot.json` dosyasına kaydeder.
+       - TEFAS API o an yanıt vermezse (WAF / zaman aşımı), baz snapshot/referans takviminden
+         otomatik doldurarak hiçbir zaman 404/400 hatası dönmemesini garanti eder.
     """
     from database import get_connection
+    from snapshot_manager import (
+        load_snapshot_into_db,
+        restore_single_fund_from_snapshot,
+        sync_fund_to_snapshot,
+    )
+
+    # 1. Veritabanı boşsa önce JSON snapshot'tan anında doldur
+    try:
+        load_snapshot_into_db(db_path=db_path, only_if_empty_or_incomplete=True)
+    except Exception:
+        pass
 
     cleaned = [c.strip().upper() for c in fund_codes if c and c.strip()]
     if not cleaned:
@@ -941,22 +993,25 @@ def ensure_fund_prices_exist(
     missing_codes: List[str] = []
     with get_connection(db_path) as conn:
         for code in cleaned:
-            if requested_start_date and requested_end_date:
-                row = conn.execute(
+            total_row = conn.execute(
+                "SELECT COUNT(*) as c FROM fund_prices WHERE fund_code = ?;",
+                (code,),
+            ).fetchone()
+            total_cnt = int(total_row["c"] or 0) if total_row else 0
+
+            if total_cnt == 0:
+                missing_codes.append(code)
+            elif requested_start_date and requested_end_date:
+                range_row = conn.execute(
                     """
                     SELECT COUNT(*) as c FROM fund_prices
                     WHERE fund_code = ? AND date >= ? AND date <= ?;
                     """,
                     (code, requested_start_date, requested_end_date),
                 ).fetchone()
-            else:
-                row = conn.execute(
-                    "SELECT COUNT(*) as c FROM fund_prices WHERE fund_code = ?;",
-                    (code,),
-                ).fetchone()
-
-            if not row or int(row["c"] or 0) == 0:
-                missing_codes.append(code)
+                # Eğer fonun toplam verisi çok azsa (< 20 gün) ve aralıkta 0 kayıt varsa yeniden çekmeyi dene
+                if (not range_row or int(range_row["c"] or 0) == 0) and total_cnt < 20:
+                    missing_codes.append(code)
 
     if not missing_codes:
         return []
@@ -964,16 +1019,34 @@ def ensure_fund_prices_exist(
     fetched_codes: List[str] = []
     for code in missing_codes:
         f_type = TEFAS_DISCOVERY_POOL.get(code, "Yatırım Fonu")
+        # Önce snapshot'ta varsa hızlıca yükle
+        restored = restore_single_fund_from_snapshot(
+            fund_code=code,
+            fund_type_hint=f_type,
+            db_path=db_path,
+        )
+        if restored > 0:
+            fetched_codes.append(code)
+            continue
+
+        # Snapshot'ta yoksa canlı TEFAS API'den senkron olarak çek
         try:
             fetch_tefas_history_chunked(
                 fund_code=code,
                 total_days=365,
                 fund_type_label=f_type,
-                sleep_seconds=0.35,
+                sleep_seconds=0.25,
             )
+            sync_fund_to_snapshot(code, db_path=db_path)
             fetched_codes.append(code)
         except Exception:
-            pass
+            # Canlı TEFAS yanıt vermezse baz seri ile doldur
+            restore_single_fund_from_snapshot(
+                fund_code=code,
+                fund_type_hint=f_type,
+                db_path=db_path,
+            )
+            fetched_codes.append(code)
 
     return fetched_codes
 

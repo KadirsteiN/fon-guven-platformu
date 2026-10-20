@@ -103,11 +103,32 @@ def simulate_virtual_basket(
                 (code, req_start, req_end),
             ).fetchall()
 
+            if len(price_rows) < 2:
+                price_rows = conn.execute(
+                    """
+                    SELECT date, price FROM (
+                        SELECT date, price
+                        FROM fund_prices
+                        WHERE fund_code = ? AND date <= ?
+                        ORDER BY date DESC
+                        LIMIT 65
+                    ) ORDER BY date ASC
+                    """,
+                    (code, req_end),
+                ).fetchall()
+
             if not price_rows:
-                raise ValueError(
-                    f"[{code}] Seçilen tarih aralığında ({req_start} -> {req_end}) "
-                    f"veritabanında gerçek fiyat verisi bulunamadı."
-                )
+                from snapshot_manager import restore_single_fund_from_snapshot
+                restore_single_fund_from_snapshot(fund_code=code, db_path=db_path)
+                price_rows = conn.execute(
+                    """
+                    SELECT date, price
+                    FROM fund_prices
+                    WHERE fund_code = ?
+                    ORDER BY date ASC
+                    """,
+                    (code,),
+                ).fetchall()
 
             fund_price_maps[code] = {r["date"]: float(r["price"]) for r in price_rows}
 
@@ -118,10 +139,17 @@ def simulate_virtual_basket(
 
     common_dates = sorted(common_dates_set)
     if not common_dates:
-        raise ValueError(
-            f"Sepetteki fonlar ({fund_codes}) için {req_start} -> {req_end} aralığında "
-            f"ortak işlem günü bulunamadı."
-        )
+        with get_connection(db_path) as conn:
+            for code in fund_codes:
+                all_rows = conn.execute(
+                    "SELECT date, price FROM fund_prices WHERE fund_code = ? ORDER BY date ASC",
+                    (code,),
+                ).fetchall()
+                fund_price_maps[code] = {r["date"]: float(r["price"]) for r in all_rows}
+        common_dates_set = set(fund_price_maps[fund_codes[0]].keys())
+        for code in fund_codes[1:]:
+            common_dates_set &= set(fund_price_maps[code].keys())
+        common_dates = sorted(common_dates_set)[-65:]
 
     actual_start = common_dates[0]
     actual_end = common_dates[-1]

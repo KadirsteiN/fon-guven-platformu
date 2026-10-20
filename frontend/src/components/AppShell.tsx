@@ -98,8 +98,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     const handleBrandingEvent = () => loadBrandingAndSync();
     window.addEventListener("branding-updated", handleBrandingEvent);
-    return () =>
+
+    // Render Free Tier Uyku Önleyici (Keep-Alive: Her 10 dakikada bir /api/health ping)
+    const keepAliveTimer = window.setInterval(() => {
+      apiFetch<any>("/api/health").catch(() => {});
+    }, 10 * 60 * 1000);
+
+    return () => {
       window.removeEventListener("branding-updated", handleBrandingEvent);
+      window.clearInterval(keepAliveTimer);
+    };
   }, []);
 
   // BÖLÜM 3: Sayfa Görüntülenme (PAGE_VIEW) ve Sayfada Kalma Süresi (TIME_ON_PAGE) Telemetrisi

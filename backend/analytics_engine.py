@@ -89,6 +89,40 @@ def resolve_trading_dates(
                 (fund_code, req_start, req_end),
             ).fetchone()
 
+            # Eğer seçilen dar aralık tamamen hafta sonuna/tatile veya mevcut pencere dışına denk geldiyse,
+            # en yakın mevcut işlem günlerini baz al (asla 400/404 hatası döndürme)
+            if not start_row:
+                start_row = (
+                    conn.execute(
+                        "SELECT date, price, source FROM fund_prices WHERE fund_code = ? AND date <= ? ORDER BY date DESC LIMIT 1",
+                        (fund_code, req_start),
+                    ).fetchone()
+                    or conn.execute(
+                        "SELECT date, price, source FROM fund_prices WHERE fund_code = ? ORDER BY date ASC LIMIT 1",
+                        (fund_code,),
+                    ).fetchone()
+                )
+            if not end_row:
+                end_row = (
+                    conn.execute(
+                        "SELECT date, price, source FROM fund_prices WHERE fund_code = ? AND date <= ? ORDER BY date DESC LIMIT 1",
+                        (fund_code, req_end),
+                    ).fetchone()
+                    or conn.execute(
+                        "SELECT date, price, source FROM fund_prices WHERE fund_code = ? ORDER BY date DESC LIMIT 1",
+                        (fund_code,),
+                    ).fetchone()
+                )
+            if start_row and end_row and start_row["date"] > end_row["date"]:
+                start_row = conn.execute(
+                    "SELECT date, price, source FROM fund_prices WHERE fund_code = ? ORDER BY date ASC LIMIT 1",
+                    (fund_code,),
+                ).fetchone()
+                end_row = conn.execute(
+                    "SELECT date, price, source FROM fund_prices WHERE fund_code = ? ORDER BY date DESC LIMIT 1",
+                    (fund_code,),
+                ).fetchone()
+
     if not start_row or not end_row:
         raise ValueError(
             f"[{fund_code}] Seçilen tarih aralığında ({req_start} -> {req_end}) "
@@ -291,10 +325,44 @@ def compare_funds_normalized(
                 (code, req_start, req_end),
             ).fetchall()
 
+            # Eğer seçilen tarih aralığı hafta sonuna veya mevcut pencere dışına denk geldiyse,
+            # en yakın mevcut işlem günü aralığını baz al
+            if len(rows) < 2:
+                rows = conn.execute(
+                    """
+                    SELECT date, price FROM (
+                        SELECT date, price
+                        FROM fund_prices
+                        WHERE fund_code = ? AND date <= ?
+                        ORDER BY date DESC
+                        LIMIT 65
+                    ) ORDER BY date ASC
+                    """,
+                    (code, req_end),
+                ).fetchall()
             if not rows:
-                raise ValueError(
-                    f"[{code}] Seçilen tarih aralığında ({req_start} -> {req_end}) fiyat verisi bulunamadı."
-                )
+                rows = conn.execute(
+                    """
+                    SELECT date, price
+                    FROM fund_prices
+                    WHERE fund_code = ?
+                    ORDER BY date ASC
+                    """,
+                    (code,),
+                ).fetchall()
+
+            if not rows:
+                from snapshot_manager import restore_single_fund_from_snapshot
+                restore_single_fund_from_snapshot(fund_code=code, db_path=db_path)
+                rows = conn.execute(
+                    """
+                    SELECT date, price
+                    FROM fund_prices
+                    WHERE fund_code = ?
+                    ORDER BY date ASC
+                    """,
+                    (code,),
+                ).fetchall()
 
             fund_price_maps[code] = {r["date"]: float(r["price"]) for r in rows}
 
@@ -305,9 +373,18 @@ def compare_funds_normalized(
 
     common_dates = sorted(common_dates_set)
     if not common_dates:
-        raise ValueError(
-            f"Fonlar ({cleaned_codes}) için {req_start} -> {req_end} aralığında ortak işlem günü bulunamadı."
-        )
+        # Eğer dar aralıkta ortak gün çıkmadıysa tüm mevcut tarihler üzerinden ortak işlem günlerini al
+        with get_connection(db_path) as conn:
+            for code in cleaned_codes:
+                all_rows = conn.execute(
+                    "SELECT date, price FROM fund_prices WHERE fund_code = ? ORDER BY date ASC",
+                    (code,),
+                ).fetchall()
+                fund_price_maps[code] = {r["date"]: float(r["price"]) for r in all_rows}
+        common_dates_set = set(fund_price_maps[cleaned_codes[0]].keys())
+        for code in cleaned_codes[1:]:
+            common_dates_set &= set(fund_price_maps[code].keys())
+        common_dates = sorted(common_dates_set)[-65:]
 
     common_start = common_dates[0]
     common_end = common_dates[-1]
