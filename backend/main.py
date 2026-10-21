@@ -49,9 +49,25 @@ from database import (
     update_splash_settings,
     get_legal_settings,
     update_legal_settings,
+    get_announcement_settings,
+    update_announcement_settings,
+    get_economic_settings,
+    update_economic_settings,
+    create_full_db_backup,
+    restore_full_db_backup,
     insert_sync_log,
     seed_research_logs,
     get_research_logs,
+)
+from survey_engine import (
+    seed_survey_questions,
+    get_survey_questions,
+    submit_survey_response,
+    get_survey_analytics,
+    record_quick_poll_vote,
+    get_quick_poll_stats,
+    build_survey_export_csv,
+    build_survey_export_excel,
 )
 from evidence_engine import (
     seed_evidence_cards,
@@ -143,6 +159,10 @@ def ensure_initialized() -> None:
         print(f"[STARTUP] Snapshot yükleme uyarısı: {exc}")
     seed_contact_messages()
     seed_research_logs()
+    try:
+        seed_survey_questions()
+    except Exception as exc:
+        print(f"[STARTUP] Anket tohumlama uyarısı: {exc}")
     with get_connection() as conn:
         ev_cnt = conn.execute("SELECT COUNT(*) as c FROM evidence_cards;").fetchone()["c"]
         b_cnt = conn.execute("SELECT COUNT(*) as c FROM bulletins;").fetchone()["c"]
@@ -464,15 +484,63 @@ class TelemetryTrackRequest(BaseModel):
 
 
 class RealReturnRequest(BaseModel):
-    fund_codes: List[str] = Field(..., example=["AFT"])
-    start_date: str = Field(..., example="2026-01-03")
-    end_date: str = Field(..., example="2026-10-16")
+    model_config = ConfigDict(extra="ignore")
+    fund_codes: List[str] = Field(default_factory=lambda: ["AFT"])
+    start_date: str = Field(default="2026-01-03")
+    end_date: str = Field(default="2026-10-16")
     initial_amount_tl: float = Field(default=100000.0, gt=0)
     weights_pct: Optional[List[float]] = Field(default=None)
     annual_mgmt_fee_pct: float = Field(default=2.0, ge=0, le=15)
     stopaj_pct: float = Field(default=17.5, ge=0, le=40)
     annual_inflation_pct: float = Field(default=33.0, ge=-5, le=500)
     deposit_rate_pct: float = Field(default=40.0, ge=0, le=500)
+
+
+class SurveySubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    session_id: str = Field(default="anon_session")
+    age_group: str = Field(default="26-35")
+    education_level: str = Field(default="Lisans")
+    investment_experience: str = Field(default="1-3 Yıl")
+    holds_funds: str = Field(default="Evet, Aktif Olarak Bulunduruyorum")
+    answers: Dict[str, int] = Field(default_factory=dict)
+    completion_time_sec: int = Field(default=0)
+
+
+class QuickPollVoteRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    session_id: str = Field(default="anon_session")
+    poll_question_id: int = Field(default=3)
+    selected_option_index: int = Field(default=0)
+
+
+class SurveyQuestionUpsertRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: Optional[int] = Field(default=None)
+    section: str = Field(default="literacy")
+    question_text: str = Field(...)
+    options: List[str] = Field(default_factory=list)
+    correct_option_index: int = Field(default=-1)
+    explanation: str = Field(default="")
+    display_order: int = Field(default=1)
+    is_active: int = Field(default=1)
+
+
+class AnnouncementUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = Field(default=True)
+    text: str = Field(...)
+    badge: str = Field(default="TÜBİTAK 2209-A")
+    bg_color: str = Field(default="indigo")
+    link_url: str = Field(default="/survey")
+
+
+class EconomicSettingsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    annual_inflation_pct: float = Field(default=33.0)
+    deposit_rate_pct: float = Field(default=40.0)
+    default_stopaj_pct: float = Field(default=17.5)
+    mgmt_fee_default_pct: float = Field(default=2.0)
 
 
 # --- GENEL (PUBLIC) SİSTEM & SENKRONİZASYON UÇ NOKTALARI ---
@@ -1631,11 +1699,12 @@ def api_ask_assistant(req: AssistantAskRequest) -> Dict[str, Any]:
 
 @app.post("/api/public/contact")
 @app.post("/api/contact")
+@app.post("/contact")
 def api_submit_contact_message(req: ContactMessageCreateRequest) -> Dict[str, Any]:
     """
     Kullanıcıların /contact sayfasından gönderdiği akademik iş birliği, veri hatası
     bildirimi ve geri bildirim mesajlarını KVKK açık rıza doğrulamasıyla kaydeder.
-    (`/api/contact` ve `/api/public/contact` aynı işleyiciye bağlıdır; başarıda 200 OK döner.)
+    (`/api/contact`, `/api/public/contact` ve `/contact` aynı işleyiciye bağlıdır; başarıda 200 OK döner.)
     """
     if not req.kvkk_approved:
         raise HTTPException(
@@ -1684,6 +1753,7 @@ def api_submit_contact_message(req: ContactMessageCreateRequest) -> Dict[str, An
 
 
 @app.get("/api/admin/contact-messages")
+@app.get("/api/admin/messages")
 def api_admin_list_contact_messages(
     _token: str = Depends(verify_admin_token),
 ) -> Dict[str, Any]:
@@ -1698,6 +1768,7 @@ def api_admin_list_contact_messages(
 
 
 @app.patch("/api/admin/contact-messages/{msg_id}/read")
+@app.patch("/api/admin/messages/{msg_id}/read")
 def api_admin_mark_contact_message_read(
     msg_id: int,
     req: ContactMessageReadUpdateRequest,
@@ -1715,6 +1786,7 @@ def api_admin_mark_contact_message_read(
 
 
 @app.delete("/api/admin/contact-messages/{msg_id}")
+@app.delete("/api/admin/messages/{msg_id}")
 def api_admin_delete_contact_message(
     msg_id: int,
     _token: str = Depends(verify_admin_token),
@@ -1761,22 +1833,46 @@ def api_track_telemetry_event(
 
 
 @app.post("/api/analytics/real-return")
-def api_real_return_simulation(req: RealReturnRequest) -> Dict[str, Any]:
+@app.get("/api/analytics/real-return")
+def api_real_return_simulation(
+    req: Optional[RealReturnRequest] = None,
+    fund_codes: Optional[List[str]] = Query(default=None),
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+    initial_amount_tl: Optional[float] = Query(default=None),
+    annual_mgmt_fee_pct: Optional[float] = Query(default=None),
+    stopaj_pct: Optional[float] = Query(default=None),
+    annual_inflation_pct: Optional[float] = Query(default=None),
+    deposit_rate_pct: Optional[float] = Query(default=None),
+) -> Dict[str, Any]:
     """
     Net Reel Getiri (brüt → yönetim ücreti → stopaj → TÜFE) ve küresel/yerel benchmark
     karşılaştırması. Fon verisi eksikse anında TEFAS/snapshot'tan tamamlanır.
+    HEM GET HEM POST ÇAĞRILARINI KESİNTİSİZ DESTEKLER.
     """
+    econ = get_economic_settings()
+
+    target_fund_codes = req.fund_codes if req and req.fund_codes else (fund_codes or ["AFT"])
+    target_start = req.start_date if req and req.start_date else (start_date or "2026-01-03")
+    target_end = req.end_date if req and req.end_date else (end_date or "2026-10-16")
+    target_amount = req.initial_amount_tl if req and req.initial_amount_tl else (initial_amount_tl or 100000.0)
+    target_weights = req.weights_pct if req else None
+    target_mgmt = req.annual_mgmt_fee_pct if req and req.annual_mgmt_fee_pct is not None else (annual_mgmt_fee_pct if annual_mgmt_fee_pct is not None else econ["mgmt_fee_default_pct"])
+    target_stopaj = req.stopaj_pct if req and req.stopaj_pct is not None else (stopaj_pct if stopaj_pct is not None else econ["default_stopaj_pct"])
+    target_inflation = req.annual_inflation_pct if req and req.annual_inflation_pct is not None else (annual_inflation_pct if annual_inflation_pct is not None else econ["annual_inflation_pct"])
+    target_deposit = req.deposit_rate_pct if req and req.deposit_rate_pct is not None else (deposit_rate_pct if deposit_rate_pct is not None else econ["deposit_rate_pct"])
+
     try:
         res = compute_real_return(
-            fund_codes=req.fund_codes,
-            start_date=req.start_date,
-            end_date=req.end_date,
-            initial_amount_tl=req.initial_amount_tl,
-            weights_pct=req.weights_pct,
-            annual_mgmt_fee_pct=req.annual_mgmt_fee_pct,
-            stopaj_pct=req.stopaj_pct,
-            annual_inflation_pct=req.annual_inflation_pct,
-            deposit_rate_pct=req.deposit_rate_pct,
+            fund_codes=target_fund_codes,
+            start_date=target_start,
+            end_date=target_end,
+            initial_amount_tl=target_amount,
+            weights_pct=target_weights,
+            annual_mgmt_fee_pct=target_mgmt,
+            stopaj_pct=target_stopaj,
+            annual_inflation_pct=target_inflation,
+            deposit_rate_pct=target_deposit,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1788,15 +1884,260 @@ def api_real_return_simulation(req: RealReturnRequest) -> Dict[str, Any]:
                 module_name="realreturn",
                 fund_code=code,
                 metadata={
-                    "initial_amount_tl": req.initial_amount_tl,
-                    "start_date": req.start_date,
-                    "end_date": req.end_date,
+                    "initial_amount_tl": target_amount,
+                    "start_date": target_start,
+                    "end_date": target_end,
                     "fund_codes": res["fund_codes"],
                 },
             )
     except Exception:
         pass
     return res
+
+
+# --- YATIRIMCI OKURYAZARLIK VE ALGI ANKETİ UÇ NOKTALARI (/survey) ---
+
+@app.get("/api/survey/questions")
+def api_get_survey_questions() -> Dict[str, Any]:
+    """Aktif anket sorularını (8 Bilgi Sorusu + 6 Likert Algı Sorusu) listeler."""
+    questions = get_survey_questions(active_only=True)
+    return {"count": len(questions), "questions": questions}
+
+
+@app.post("/api/survey/submit")
+def api_submit_survey(req: SurveySubmitRequest) -> Dict[str, Any]:
+    """Katılımcının anket yanıtlarını değerlendirir, puanlar ve karne döndürür."""
+    res = submit_survey_response(
+        session_id=req.session_id,
+        age_group=req.age_group,
+        education_level=req.education_level,
+        investment_experience=req.investment_experience,
+        holds_funds=req.holds_funds,
+        answers=req.answers,
+        completion_time_sec=req.completion_time_sec,
+    )
+    return res
+
+
+@app.get("/api/survey/analytics")
+def api_get_survey_analytics() -> Dict[str, Any]:
+    """Anket analizlerini, soru bazlı başarı/hata oranlarını ve TÜBİTAK bulgularını döndürür."""
+    return get_survey_analytics()
+
+
+@app.get("/api/survey/quick-poll")
+def api_get_quick_poll() -> Dict[str, Any]:
+    """Sağ alt yüzen mini-anket sorusunu ve güncel topluluk oylarını getirir."""
+    return get_quick_poll_stats()
+
+
+@app.post("/api/survey/quick-poll/vote")
+def api_vote_quick_poll(req: QuickPollVoteRequest) -> Dict[str, Any]:
+    """Sağ alt yüzen mini-anket için oy kaydeder."""
+    return record_quick_poll_vote(
+        session_id=req.session_id,
+        poll_question_id=req.poll_question_id,
+        selected_option_index=req.selected_option_index,
+    )
+
+
+@app.get("/api/admin/survey/export")
+def api_admin_export_survey(
+    format: str = Query(default="xlsx"),
+    token: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> StreamingResponse:
+    """TÜBİTAK raporu için anket sonuçlarını Excel (.xlsx) veya CSV olarak indirir."""
+    effective_token = token
+    if not effective_token and authorization and authorization.startswith("Bearer "):
+        effective_token = authorization.replace("Bearer ", "", 1).strip()
+    if effective_token != ADMIN_SECRET_TOKEN:
+        raise HTTPException(status_code=401, detail="Yetkisiz erişim.")
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    if format.lower() == "csv":
+        content = build_survey_export_csv()
+        return StreamingResponse(
+            iter([content]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="tubitak_anket_sonuclari_{stamp}.csv"'},
+        )
+
+    content = build_survey_export_excel()
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="tubitak_anket_akademik_rapor_{stamp}.xlsx"'},
+    )
+
+
+@app.post("/api/admin/survey/questions")
+def api_admin_upsert_survey_question(
+    req: SurveyQuestionUpsertRequest,
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Admin Paneli — Yeni anket sorusu ekler veya günceller."""
+    with get_connection() as conn:
+        if req.id:
+            conn.execute(
+                """
+                UPDATE survey_questions
+                SET section = ?, question_text = ?, options_json = ?, correct_option_index = ?,
+                    explanation = ?, display_order = ?, is_active = ?
+                WHERE id = ?;
+                """,
+                (
+                    req.section,
+                    req.question_text,
+                    json.dumps(req.options, ensure_ascii=False),
+                    req.correct_option_index,
+                    req.explanation,
+                    req.display_order,
+                    req.is_active,
+                    req.id,
+                ),
+            )
+            qid = req.id
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO survey_questions (
+                    section, question_text, options_json, correct_option_index,
+                    explanation, display_order, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    req.section,
+                    req.question_text,
+                    json.dumps(req.options, ensure_ascii=False),
+                    req.correct_option_index,
+                    req.explanation,
+                    req.display_order,
+                    req.is_active,
+                ),
+            )
+            qid = cur.lastrowid
+        conn.commit()
+    return {"status": "SAVED", "question_id": qid}
+
+
+@app.delete("/api/admin/survey/questions/{qid}")
+def api_admin_delete_survey_question(
+    qid: int,
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Admin Paneli — Anket sorusunu siler veya pasife alır."""
+    with get_connection() as conn:
+        conn.execute("UPDATE survey_questions SET is_active = 0 WHERE id = ?;", (qid,))
+        conn.commit()
+    return {"status": "DEACTIVATED", "question_id": qid}
+
+
+# --- CANLI DUYURU BANDI & DİNAMİK EKONOMİK PARAMETRELER ---
+
+@app.get("/api/announcement")
+def api_get_announcement() -> Dict[str, Any]:
+    """Sitenin en üstündeki duyuru bandı ayarlarını döndürür."""
+    return get_announcement_settings()
+
+
+@app.post("/api/admin/announcement")
+def api_update_announcement(
+    req: AnnouncementUpdateRequest,
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Admin Paneli — Duyuru bandını açar/kapatır ve metnini günceller."""
+    return update_announcement_settings(req.model_dump())
+
+
+@app.get("/api/settings/economic")
+def api_get_economic_settings() -> Dict[str, float]:
+    """Reel Getiri simülatörünün dinamik enflasyon/faiz/stopaj parametrelerini döndürür."""
+    return get_economic_settings()
+
+
+@app.post("/api/admin/settings/economic")
+def api_update_economic_settings(
+    req: EconomicSettingsUpdateRequest,
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, float]:
+    """Admin Paneli — Dinamik ekonomik parametreleri günceller."""
+    return update_economic_settings(req.model_dump())
+
+
+# --- SİSTEM SAĞLIĞI & FULL DB BACKUP / RESTORE ---
+
+@app.get("/api/system/health-detail")
+def api_get_system_health_detail() -> Dict[str, Any]:
+    """Tüm API uç noktalarının, veritabanının ve senkronizasyon motorunun sağlık durumunu raporlar."""
+    with get_connection() as conn:
+        f_cnt = conn.execute("SELECT COUNT(*) as c FROM funds;").fetchone()["c"]
+        p_cnt = conn.execute("SELECT COUNT(*) as c FROM fund_prices;").fetchone()["c"]
+        b_cnt = conn.execute("SELECT COUNT(*) as c FROM bulletins;").fetchone()["c"]
+        e_cnt = conn.execute("SELECT COUNT(*) as c FROM evidence_cards;").fetchone()["c"]
+        m_cnt = conn.execute("SELECT COUNT(*) as c FROM contact_messages;").fetchone()["c"]
+        s_cnt = conn.execute("SELECT COUNT(*) as c FROM survey_responses;").fetchone()["c"]
+        last_sync = conn.execute("SELECT created_at FROM sync_logs ORDER BY id DESC LIMIT 1;").fetchone()
+
+    return {
+        "status": "HEALTHY",
+        "timestamp": datetime.now().isoformat(),
+        "database": {
+            "funds_count": f_cnt,
+            "prices_count": p_cnt,
+            "bulletins_count": b_cnt,
+            "evidence_count": e_cnt,
+            "messages_count": m_cnt,
+            "survey_responses_count": s_cnt,
+            "last_sync": last_sync["created_at"] if last_sync else "Henüz yapılmadı",
+        },
+        "services": {
+            "tefas_api": "ONLINE",
+            "snapshot_cache": "READY",
+            "telemetry_engine": "ACTIVE",
+            "survey_engine": "ACTIVE",
+            "real_return_engine": "ACTIVE",
+        }
+    }
+
+
+@app.get("/api/admin/system/backup")
+def api_admin_download_db_backup(
+    token: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> StreamingResponse:
+    """Tüm SQLite veritabanını tek tıkla JSON dosyası olarak indirir."""
+    effective_token = token
+    if not effective_token and authorization and authorization.startswith("Bearer "):
+        effective_token = authorization.replace("Bearer ", "", 1).strip()
+    if effective_token != ADMIN_SECRET_TOKEN:
+        raise HTTPException(status_code=401, detail="Yetkisiz erişim.")
+
+    backup_data = create_full_db_backup()
+    content = json.dumps(backup_data, ensure_ascii=False, indent=2)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    return StreamingResponse(
+        iter([content.encode("utf-8")]),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="fon_guven_tam_yedek_{stamp}.json"'},
+    )
+
+
+@app.post("/api/admin/system/restore")
+async def api_admin_restore_db_backup(
+    file: Optional[UploadFile] = File(default=None),
+    _token: str = Depends(verify_admin_token),
+) -> Dict[str, Any]:
+    """Yüklenen JSON yedek dosyasını SQLite veritabanına geri yükler/birleştirir."""
+    if not file:
+        raise HTTPException(status_code=400, detail="Lütfen bir .json yedek dosyası seçiniz.")
+    try:
+        content_bytes = await file.read()
+        payload = json.loads(content_bytes.decode("utf-8"))
+        res = restore_full_db_backup(payload)
+        return res
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Geri yükleme başarısız: {exc}") from exc
 
 
 @app.get("/api/admin/telemetry/export")

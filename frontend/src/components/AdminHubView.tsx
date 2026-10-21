@@ -41,6 +41,14 @@ import {
   Globe2,
   TrendingUp,
   Users,
+  Award,
+  Megaphone,
+  Save,
+  UploadCloud,
+  Check,
+  Copy,
+  Sliders,
+  FileJson,
 } from "lucide-react";
 import {
   API_BASE_URL,
@@ -59,6 +67,7 @@ export type AdminTabKey =
   | "bulletins"
   | "funds"
   | "research"
+  | "survey"
   | "legal"
   | "inbox"
   | "telemetry";
@@ -170,6 +179,39 @@ export default function AdminHubView({
   const [telemetryData, setTelemetryData] = useState<any | null>(null);
   const [loadingTelemetry, setLoadingTelemetry] = useState<boolean>(false);
 
+  // ANKET & AKADEMİK BULGULAR (TÜBİTAK 2209-A) state
+  const [surveyAnalytics, setSurveyAnalytics] = useState<any | null>(null);
+  const [surveyQuestions, setSurveyQuestions] = useState<any[]>([]);
+  const [loadingSurvey, setLoadingSurvey] = useState<boolean>(false);
+  const [downloadingSurvey, setDownloadingSurvey] = useState<string | null>(null);
+  const [copiedFinding, setCopiedFinding] = useState<number | null>(null);
+
+  // CANLI DUYURU BANDI & DİNAMİK EKONOMİK PARAMETRELER state
+  const [announcementData, setAnnouncementData] = useState<any>({
+    enabled: true,
+    text: "🎓 TÜBİTAK 2209-A Finansal Okuryazarlık ve Fon Algı Anketi yayında! Testi çözün ve seviyenizi anında öğrenin.",
+    badge: "TÜBİTAK 2209-A",
+    bg_color: "indigo",
+    link_url: "/survey",
+  });
+  const [savingAnnouncement, setSavingAnnouncement] = useState<boolean>(false);
+  const [announcementMsg, setAnnouncementMsg] = useState<string | null>(null);
+
+  const [economicData, setEconomicData] = useState<any>({
+    annual_inflation_pct: 33.0,
+    deposit_rate_pct: 40.0,
+    default_stopaj_pct: 17.5,
+    mgmt_fee_default_pct: 2.0,
+  });
+  const [savingEconomic, setSavingEconomic] = useState<boolean>(false);
+  const [economicMsg, setEconomicMsg] = useState<string | null>(null);
+
+  // SİSTEM SAĞLIĞI & FULL DB BACKUP / RESTORE state
+  const [systemHealth, setSystemHealth] = useState<any | null>(null);
+  const [downloadingDbBackup, setDownloadingDbBackup] = useState<boolean>(false);
+  const [restoringDbBackup, setRestoringDbBackup] = useState<boolean>(false);
+  const [backupRestoreMsg, setBackupRestoreMsg] = useState<string | null>(null);
+
   const loadAllAdminData = async () => {
     try {
       await adminFetch("/api/admin/verify");
@@ -190,6 +232,11 @@ export default function AdminHubView({
       discRes,
       inboxRes,
       telemRes,
+      surveyRes,
+      surveyQRes,
+      annRes,
+      econRes,
+      healthRes,
     ] = await Promise.all([
       apiFetch<any>("/api/public/sync-status").catch(() => null),
       apiFetch<any>("/api/public/settings").catch(() => null),
@@ -201,6 +248,11 @@ export default function AdminHubView({
       adminFetch<any>("/api/admin/bulletins/discover").catch(() => null),
       adminFetch<any>("/api/admin/contact-messages").catch(() => null),
       adminFetch<any>("/api/admin/telemetry/dashboard").catch(() => null),
+      apiFetch<any>("/api/survey/analytics").catch(() => null),
+      apiFetch<any>("/api/survey/questions").catch(() => null),
+      apiFetch<any>("/api/announcement").catch(() => null),
+      apiFetch<any>("/api/settings/economic").catch(() => null),
+      apiFetch<any>("/api/system/health-detail").catch(() => null),
     ]);
 
     if (syncRes) setSyncData(syncRes);
@@ -244,6 +296,11 @@ export default function AdminHubView({
       setUnreadCount(Number(inboxRes.unread_count || 0));
     }
     if (telemRes) setTelemetryData(telemRes);
+    if (surveyRes) setSurveyAnalytics(surveyRes);
+    if (surveyQRes?.questions) setSurveyQuestions(surveyQRes.questions);
+    if (annRes) setAnnouncementData(annRes);
+    if (econRes) setEconomicData(econRes);
+    if (healthRes) setSystemHealth(healthRes);
   };
 
   useEffect(() => {
@@ -810,6 +867,130 @@ export default function AdminHubView({
     }
   };
 
+  const handleSaveAnnouncement = async () => {
+    setSavingAnnouncement(true);
+    setAnnouncementMsg(null);
+    try {
+      const res = await adminFetch<any>("/api/admin/announcement", {
+        method: "POST",
+        body: JSON.stringify(announcementData),
+      });
+      setAnnouncementData(res);
+      setAnnouncementMsg("Duyuru bandı ayarları başarıyla kaydedildi.");
+    } catch (e: any) {
+      setAnnouncementMsg(`Hata: ${e.message}`);
+    } finally {
+      setSavingAnnouncement(false);
+    }
+  };
+
+  const handleSaveEconomic = async () => {
+    setSavingEconomic(true);
+    setEconomicMsg(null);
+    try {
+      const res = await adminFetch<any>("/api/admin/settings/economic", {
+        method: "POST",
+        body: JSON.stringify(economicData),
+      });
+      setEconomicData(res);
+      setEconomicMsg("Dinamik ekonomik parametreler başarıyla güncellendi.");
+    } catch (e: any) {
+      setEconomicMsg(`Hata: ${e.message}`);
+    } finally {
+      setSavingEconomic(false);
+    }
+  };
+
+  const handleDownloadFullDbBackup = async () => {
+    setDownloadingDbBackup(true);
+    setBackupRestoreMsg(null);
+    try {
+      const token = getAdminToken() || "";
+      const res = await fetch(`${API_BASE_URL}/api/admin/system/backup?token=${encodeURIComponent(token)}`);
+      if (!res.ok) throw new Error("Yedek indirme başarısız");
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `fon_guven_tam_yedek_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      setBackupRestoreMsg("Tüm veritabanı (fonlar, fiyatlar, bültenler, mesajlar, anketler) başarıyla JSON olarak bilgisayarınıza indirildi.");
+    } catch (e: any) {
+      setBackupRestoreMsg(`Yedekleme hatası: ${e.message}`);
+    } finally {
+      setDownloadingDbBackup(false);
+    }
+  };
+
+  const handleRestoreFullDbBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRestoringDbBackup(true);
+    setBackupRestoreMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = getAdminToken() || "";
+      const res = await fetch(`${API_BASE_URL}/api/admin/system/restore`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+      const data = await res.json();
+      setBackupRestoreMsg(`Geri yükleme başarılı! Geri yüklenen tablolar: ${JSON.stringify(data.restored_tables)}`);
+      await loadAllAdminData();
+    } catch (e: any) {
+      setBackupRestoreMsg(`Geri yükleme hatası: ${e.message}`);
+    } finally {
+      setRestoringDbBackup(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleDownloadSurveyExport = async (format: "xlsx" | "csv") => {
+    setDownloadingSurvey(format);
+    try {
+      const token = getAdminToken() || "";
+      const res = await fetch(`${API_BASE_URL}/api/admin/survey/export?format=${format}&token=${encodeURIComponent(token)}`);
+      if (!res.ok) throw new Error("Anket indirme başarısız");
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `tubitak_anket_${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (e: any) {
+      alert(`İndirme hatası: ${e.message}`);
+    } finally {
+      setDownloadingSurvey(null);
+    }
+  };
+
+  const handleRefreshSurvey = async () => {
+    setLoadingSurvey(true);
+    try {
+      const [an, q] = await Promise.all([
+        apiFetch<any>("/api/survey/analytics"),
+        apiFetch<any>("/api/survey/questions"),
+      ]);
+      if (an) setSurveyAnalytics(an);
+      if (q?.questions) setSurveyQuestions(q.questions);
+    } catch {}
+    finally {
+      setLoadingSurvey(false);
+    }
+  };
+
   if (!authChecked) {
     return (
       <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm text-slate-500">
@@ -871,20 +1052,25 @@ export default function AdminHubView({
               icon: GraduationCap,
             },
             {
+              key: "survey" as AdminTabKey,
+              label: "6. Anket & Akademik Bulgular (TÜBİTAK 2209-A)",
+              icon: Award,
+            },
+            {
               key: "legal" as AdminTabKey,
-              label: "6. Yasal Metinler & Sözleşmeler",
+              label: "7. Yasal Metinler & Sözleşmeler",
               icon: Scale,
             },
             {
               key: "inbox" as AdminTabKey,
-              label: `7. Gelen Mesajlar (İletişim)${
+              label: `8. Gelen Mesajlar (İletişim)${
                 unreadCount > 0 ? ` (${unreadCount} Yeni)` : ""
               }`,
               icon: Inbox,
             },
             {
               key: "telemetry" as AdminTabKey,
-              label: "8. Platform İstatistikleri & Davranış Analizi",
+              label: "9. Platform İstatistikleri & Davranış Analizi",
               icon: BarChart3,
             },
           ].map((t) => {
@@ -1029,6 +1215,255 @@ export default function AdminHubView({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* SİSTEM SAĞLIĞI & VERİTABANI YEDEKLEME (JSON BACKUP / RESTORE) */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  Sistem Sağlığı &amp; Tam Yedekleme (Render Koruma Motoru)
+                </div>
+                <h3 className="text-base font-bold">
+                  Veritabanı Sağlık Durumu &amp; Tek Tıkla Full JSON Yedek / Geri Yükleme
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Render Ephemeral Filesystem sıfırlanmalarına karşı tüm fonları, bültenleri, anketleri ve mesajları tek tıkla bilgisayarınıza indirin veya geri yükleyin.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadFullDbBackup}
+                  disabled={downloadingDbBackup}
+                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {downloadingDbBackup ? "Paketleniyor..." : "💾 Tüm Veritabanını Yedek İndir (JSON)"}
+                </button>
+
+                <label className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  {restoringDbBackup ? "Yükleniyor..." : "📤 Yedekten Geri Yükle (Restore JSON)"}
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleRestoreFullDbBackup}
+                    disabled={restoringDbBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {backupRestoreMsg && (
+              <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-900 dark:text-blue-200 font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>{backupRestoreMsg}</span>
+              </div>
+            )}
+
+            {systemHealth && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Takip Edilen Fon</div>
+                  <div className="text-lg font-bold text-blue-600">{systemHealth.database?.funds_count || 0} Fon</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Gerçek Fiyat Kaydı</div>
+                  <div className="text-lg font-bold text-indigo-600 font-mono">
+                    {Number(systemHealth.database?.prices_count || 0).toLocaleString("tr-TR")}
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">KAP Bülteni</div>
+                  <div className="text-lg font-bold text-amber-600">{systemHealth.database?.bulletins_count || 0} Adet</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Resmi Kanıt Kartı</div>
+                  <div className="text-lg font-bold text-emerald-600">{systemHealth.database?.evidence_count || 0} Kart</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Anket Katılımcısı</div>
+                  <div className="text-lg font-bold text-purple-600">{systemHealth.database?.survey_responses_count || 0} Kişi</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">TEFAS API Servisi</div>
+                  <div className="text-sm font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    ÇEVRİMİÇİ
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CANLI DUYURU BANDI & DİNAMİK EKONOMİK PARAMETRELER (2 SÜTUNLU KART) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Sol: Canlı Duyuru Bandı Yönetimi */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full mb-1">
+                    <Megaphone className="w-3.5 h-3.5" />
+                    Canlı Bilgi &amp; Duyuru Bandı
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Sitenin En Üstünde Görünecek Duyuru Çubuğu
+                  </h4>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                  <input
+                    type="checkbox"
+                    checked={announcementData.enabled}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, enabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600"
+                  />
+                  <span>Duyuru Bandını Sitede Aktif Olarak Göster</span>
+                </label>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Duyuru Metni:
+                  </label>
+                  <input
+                    type="text"
+                    value={announcementData.text}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, text: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                      Rozet Metni:
+                    </label>
+                    <input
+                      type="text"
+                      value={announcementData.badge}
+                      onChange={(e) => setAnnouncementData({ ...announcementData, badge: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                      Yönlendirme Linki:
+                    </label>
+                    <input
+                      type="text"
+                      value={announcementData.link_url}
+                      onChange={(e) => setAnnouncementData({ ...announcementData, link_url: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {announcementMsg && (
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">
+                    {announcementMsg}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveAnnouncement}
+                  disabled={savingAnnouncement}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingAnnouncement ? "Kaydediliyor..." : "Duyuruyu Yayınla"}
+                </button>
+              </div>
+            </div>
+
+            {/* Sağ: Dinamik Ekonomik Parametreler & Simülatör Kontrolü */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-full mb-1">
+                  <Sliders className="w-3.5 h-3.5" />
+                  Reel Getiri Simülatörü Kontrolü
+                </div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Dinamik Makroekonomik Katsayılar
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Reel Getiri hesaplamasında varsayılan olarak kullanılan TÜFE, Mevduat ve Stopaj parametrelerini doğrudan güncelleyin.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Yıllık TÜFE Enflasyon (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={economicData.annual_inflation_pct}
+                    onChange={(e) => setEconomicData({ ...economicData, annual_inflation_pct: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Mevduat / TLREF Yıllık Faiz (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={economicData.deposit_rate_pct}
+                    onChange={(e) => setEconomicData({ ...economicData, deposit_rate_pct: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Varsayılan Stopaj Vergisi (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={economicData.default_stopaj_pct}
+                    onChange={(e) => setEconomicData({ ...economicData, default_stopaj_pct: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Varsayılan Fon Yönetim Ücreti (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={economicData.mgmt_fee_default_pct}
+                    onChange={(e) => setEconomicData({ ...economicData, mgmt_fee_default_pct: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {economicMsg && (
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">
+                  {economicMsg}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveEconomic}
+                disabled={savingEconomic}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {savingEconomic ? "Kaydediliyor..." : "Ekonomik Parametreleri Kaydet"}
+              </button>
             </div>
           </div>
         </div>
@@ -2693,7 +3128,374 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 6: YASAL METİNLER & SÖZLEŞMELER (SPK, KULLANIM KOŞULLARI, KVKK, TÜBİTAK ONAMI, METODOLOJİ — GÖREV 4) */}
+      {/* SEKME 6: ANKET & AKADEMİK BULGULAR (TÜBİTAK 2209-A) */}
+      {activeTab === "survey" && (
+        <div className="space-y-6">
+          {/* Üst Başlık & Aksiyon Çubuğu */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full mb-1.5">
+                <GraduationCap className="w-3.5 h-3.5" />
+                TÜBİTAK 2209-A Üniversite Öğrencileri Araştırma Projeleri Destekleme Programı
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                Yatırımcı Okuryazarlık ve Algı Anketi & Akademik Bulgular Komuta Merkezi
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Ziyaretçilerin fon güvencesi, stopaj, yönetim ücreti ve getiri hesaplama konusundaki test yanıtları ile algı puanlarının bilimsel analizi.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshSurvey}
+                disabled={loadingSurvey}
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingSurvey ? "animate-spin" : ""}`} />
+                Yenile
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadSurveyExport("xlsx")}
+                disabled={downloadingSurvey === "xlsx"}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                {downloadingSurvey === "xlsx" ? "İndiriliyor..." : "Excel (.xlsx) İndir"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadSurveyExport("csv")}
+                disabled={downloadingSurvey === "csv"}
+                className="px-3 py-2 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {downloadingSurvey === "csv" ? "İndiriliyor..." : "CSV İndir"}
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Kartları */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+                <span>Toplam Katılımcı Sayısı</span>
+                <Users className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="text-2xl font-bold font-mono mt-1 text-slate-900 dark:text-slate-100">
+                {surveyAnalytics?.total_responses || 0}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Doğrulanmış tam anket formu
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+                <span>Ortalama Okuryazarlık Puanı</span>
+                <Award className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div className="text-2xl font-bold font-mono mt-1 text-emerald-600 dark:text-emerald-400">
+                {surveyAnalytics?.average_score != null
+                  ? Number(surveyAnalytics.average_score).toFixed(1)
+                  : "0.0"}{" "}
+                <span className="text-sm font-normal text-slate-400">/ 100</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                8 bilgi sorusu üzerinden hesaplanmıştır
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+                <span>Ortalama Şeffaflık Algı Puanı</span>
+                <Sparkles className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-bold font-mono mt-1 text-amber-600 dark:text-amber-400">
+                {surveyAnalytics?.average_perception != null
+                  ? Number(surveyAnalytics.average_perception).toFixed(2)
+                  : "0.00"}{" "}
+                <span className="text-sm font-normal text-slate-400">/ 5.00</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                6 Likert algı sorusu ortalaması
+              </div>
+            </div>
+          </div>
+
+          {/* TÜBİTAK Bilimsel Araştırma Bulgu Cümlesi Üretici */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-indigo-600" />
+                  TÜBİTAK 2209-A Bilimsel Araştırma Raporu Bulgu Cümlesi Üretici
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Veritabanındaki anket yanıtlarından dinamik olarak türetilen ve doğrudan akademik raporda veya sunumlarda kullanılabilecek bulgu cümleleri.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {surveyAnalytics?.academic_findings &&
+              surveyAnalytics.academic_findings.length > 0 ? (
+                surveyAnalytics.academic_findings.map((f: string, i: number) => (
+                  <div
+                    key={i}
+                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-start justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                      <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <span>{f}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(f);
+                        setCopiedFinding(i);
+                        setTimeout(() => setCopiedFinding(null), 2000);
+                      }}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 inline-flex items-center gap-1 shrink-0 transition-colors"
+                    >
+                      {copiedFinding === i ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span className="text-emerald-600 font-bold">Kopyalandı</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Kopyala</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-500 italic p-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl">
+                  Henüz yeterli anket yanıtı toplanmadı. Katılımcı sayısı arttıkça akademik bulgular otomatik hesaplanacaktır.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Soru Bazlı Başarı & Hata Analizi */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Soru Bazlı Başarı & Hata Oranı Analizi
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Yatırımcıların en çok hangi konularda yanılgıya düştüğünü tespit etmek için soru bazında başarı ve hata oranları.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {surveyAnalytics?.questions_analytics &&
+              surveyAnalytics.questions_analytics.length > 0 ? (
+                surveyAnalytics.questions_analytics.map((q: any) => {
+                  const success = Number(q.success_rate || 0);
+                  const error = Number(q.error_rate || 0);
+                  const isHighError = error > 50;
+
+                  return (
+                    <div
+                      key={q.question_id}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-2"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          <span className="font-mono text-slate-400 mr-1.5">
+                            #{q.question_id}
+                          </span>
+                          {q.title}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 font-mono text-[11px]">
+                          <span className="text-emerald-600 font-bold">
+                            Doğru: %{success.toFixed(1)}
+                          </span>
+                          <span className="text-slate-300">|</span>
+                          <span
+                            className={`font-bold ${
+                              isHighError ? "text-rose-600" : "text-slate-500"
+                            }`}
+                          >
+                            Hata: %{error.toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* İki renkli Bar */}
+                      <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                        <div
+                          className="h-full bg-emerald-500 transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.max(0, success))}%` }}
+                        />
+                        <div
+                          className="h-full bg-rose-500 transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.max(0, error))}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                          Kategori: {q.category}
+                        </span>
+                        <span>
+                          Toplam Cevap: {q.total_answers} ({q.correct_answers} doğru)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-xs text-slate-500 italic p-4 text-center">
+                  Henüz soru yanıt verisi bulunmamaktadır.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Demografik Kırılımlar Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Eğitim Seviyesine Göre */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Eğitim Seviyesine Göre Okuryazarlık Puanı
+              </h5>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                {surveyAnalytics?.demographics?.education_breakdown &&
+                Object.keys(surveyAnalytics.demographics.education_breakdown).length > 0 ? (
+                  Object.entries(surveyAnalytics.demographics.education_breakdown).map(
+                    ([edu, stat]: [string, any]) => (
+                      <div
+                        key={edu}
+                        className="py-2 flex items-center justify-between"
+                      >
+                        <span className="text-slate-600 dark:text-slate-400">
+                          {edu}
+                        </span>
+                        <div className="flex items-center gap-3 font-mono">
+                          <span className="text-[11px] text-slate-400">
+                            {stat.count} kişi
+                          </span>
+                          <span className="font-bold text-emerald-600">
+                            {Number(stat.avg_score || 0).toFixed(1)} / 100
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  )
+                ) : (
+                  <div className="py-3 text-slate-400 italic">Veri bulunmuyor.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Yatırım Deneyimine Göre */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <h5 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Yatırım Deneyimine Göre Okuryazarlık Puanı
+              </h5>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                {surveyAnalytics?.demographics?.experience_breakdown &&
+                Object.keys(surveyAnalytics.demographics.experience_breakdown).length > 0 ? (
+                  Object.entries(surveyAnalytics.demographics.experience_breakdown).map(
+                    ([exp, stat]: [string, any]) => (
+                      <div
+                        key={exp}
+                        className="py-2 flex items-center justify-between"
+                      >
+                        <span className="text-slate-600 dark:text-slate-400">
+                          {exp}
+                        </span>
+                        <div className="flex items-center gap-3 font-mono">
+                          <span className="text-[11px] text-slate-400">
+                            {stat.count} kişi
+                          </span>
+                          <span className="font-bold text-emerald-600">
+                            {Number(stat.avg_score || 0).toFixed(1)} / 100
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  )
+                ) : (
+                  <div className="py-3 text-slate-400 italic">Veri bulunmuyor.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Hızlı Nabız Yoklaması (Floating Quick Poll) Canlı İstatistikleri */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Sağ Alt Yüzen Mini-Anket (Hızlı Nabız) Canlı Sonuçları
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  &quot;Banka iflas ederse TEFAS fon param batar mı?&quot; sorusuna sağ alt widget üzerinden verilen anlık yanıtlar.
+                </p>
+              </div>
+              <div className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                Toplam Oy: {surveyAnalytics?.quick_poll_stats?.total_votes || 0}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs">
+                <div className="font-bold text-emerald-800 dark:text-emerald-300">
+                  A) Hayır, Takasbank&apos;ta adıma saklanır (Doğru)
+                </div>
+                <div className="text-lg font-bold font-mono text-emerald-600 mt-1">
+                  %{surveyAnalytics?.quick_poll_stats?.option_percentages?.A != null
+                    ? Number(surveyAnalytics.quick_poll_stats.option_percentages.A).toFixed(1)
+                    : "0.0"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {surveyAnalytics?.quick_poll_stats?.option_counts?.A || 0} oy
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs">
+                <div className="font-bold text-rose-800 dark:text-rose-300">
+                  B) Evet, banka batarsa para da batar
+                </div>
+                <div className="text-lg font-bold font-mono text-rose-600 mt-1">
+                  %{surveyAnalytics?.quick_poll_stats?.option_percentages?.B != null
+                    ? Number(surveyAnalytics.quick_poll_stats.option_percentages.B).toFixed(1)
+                    : "0.0"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {surveyAnalytics?.quick_poll_stats?.option_counts?.B || 0} oy
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs">
+                <div className="font-bold text-amber-800 dark:text-amber-300">
+                  C) Yalnızca TMSF limiti kadar ödenir
+                </div>
+                <div className="text-lg font-bold font-mono text-amber-600 mt-1">
+                  %{surveyAnalytics?.quick_poll_stats?.option_percentages?.C != null
+                    ? Number(surveyAnalytics.quick_poll_stats.option_percentages.C).toFixed(1)
+                    : "0.0"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {surveyAnalytics?.quick_poll_stats?.option_counts?.C || 0} oy
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEKME 7: YASAL METİNLER & SÖZLEŞMELER (SPK, KULLANIM KOŞULLARI, KVKK, TÜBİTAK ONAMI, METODOLOJİ — GÖREV 4) */}
       {activeTab === "legal" && (
         <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

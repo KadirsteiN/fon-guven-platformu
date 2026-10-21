@@ -18,14 +18,23 @@ import {
   RefreshCw,
   MessageSquare,
   BookOpen,
+  GraduationCap,
+  Megaphone,
+  ArrowRight,
 } from "lucide-react";
 import { API_BASE_URL, apiFetch, trackTelemetryEvent } from "@/lib/api";
+import FloatingQuickPoll from "@/components/FloatingQuickPoll";
 
 const NAV_ITEMS = [
   {
     href: "/",
     label: "Ana Sayfa (Genel Bakış)",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/survey",
+    label: "Okuryazarlık Anketi & Test",
+    icon: GraduationCap,
   },
   {
     href: "/evidence",
@@ -74,6 +83,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     site_logo_url: "",
   });
   const [syncInfo, setSyncInfo] = useState<any>(null);
+  const [announcement, setAnnouncement] = useState<any>({
+    enabled: true,
+    text: "🎓 TÜBİTAK 2209-A Finansal Okuryazarlık & Fon Algı Araştırmamız yayında! Testi çözün ve seviyenizi anında öğrenin.",
+    badge: "TÜBİTAK 2209-A",
+    bg_color: "indigo",
+    link_url: "/survey",
+  });
+  const [announcementDismissed, setAnnouncementDismissed] = useState(false);
 
   const loadBrandingAndSync = () => {
     apiFetch<any>("/api/public/settings")
@@ -91,6 +108,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     apiFetch<any>("/api/public/sync-status")
       .then((res) => setSyncInfo(res))
+      .catch(() => {});
+
+    apiFetch<any>("/api/announcement")
+      .then((res) => {
+        if (res) setAnnouncement(res);
+      })
       .catch(() => {});
   };
 
@@ -291,6 +314,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Ana İçerik Alanı */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Canlı Duyuru & Bilgi Bandı (Admin Kontrollü) */}
+        {announcement?.enabled && !announcementDismissed && (
+          <div className="bg-gradient-to-r from-indigo-700 via-blue-700 to-indigo-800 text-white text-xs font-medium py-2 px-4 px-lg-8 flex items-center justify-between gap-3 shadow-inner z-40">
+            <Link
+              href={announcement.link_url || "/survey"}
+              className="flex items-center gap-2 hover:underline min-w-0 flex-1"
+            >
+              <span className="px-2 py-0.5 rounded-full bg-white/20 text-white font-bold text-[10px] shrink-0">
+                {announcement.badge || "TÜBİTAK 2209-A"}
+              </span>
+              <span className="truncate">{announcement.text}</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0 opacity-80" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setAnnouncementDismissed(true)}
+              className="p-1 rounded hover:bg-white/10 shrink-0 text-white/80 hover:text-white"
+              title="Kapat"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Üst Bilgi Çubuğu (Header) */}
         <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
@@ -335,6 +382,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {children}
         </main>
+
+        {/* Sağ Alt Yüzen Mini-Anket Widget'ı */}
+        <FloatingQuickPoll />
       </div>
     </div>
   );

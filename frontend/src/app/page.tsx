@@ -11,6 +11,7 @@ import {
   FileText,
   Briefcase,
   LineChart,
+  GraduationCap,
 } from "lucide-react";
 import { apiFetch, formatNumberTR } from "@/lib/api";
 
@@ -151,6 +152,32 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* 🎓 TÜBİTAK 2209-A FİNANSAL OKURYAZARLIK & FON ALGI ANKETİ HERO KARTI */}
+      <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 border border-indigo-500/30">
+        <div className="space-y-2 relative z-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold text-amber-300">
+            <GraduationCap className="w-4 h-4" />
+            TÜBİTAK 2209-A Akademik Araştırma Ölçeği
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            🎓 Finansal Okuryazarlık &amp; Fon Algı Araştırmasına Katılın
+          </h2>
+          <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl leading-relaxed">
+            14 soruluk bilimsel testimizi çözün; Takasbank güvencesi, yönetim ücretleri ve stopaj konularındaki bilginizi ölçerek anında <strong>Finansal Okuryazarlık Karnenizi</strong> alın!
+          </p>
+        </div>
+
+        <div className="shrink-0 relative z-10 flex flex-wrap gap-2.5">
+          <Link
+            href="/survey"
+            className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm shadow-lg inline-flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
+          >
+            <span>Testi Çöz &amp; Seviyeni Öğren</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </div>
+
       {/* Üst Karşılama ve Sistem Doğrulama Kartı */}
       <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-700 via-blue-800 to-slate-900 text-white shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">

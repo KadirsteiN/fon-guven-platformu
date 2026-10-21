@@ -953,6 +953,277 @@ def delete_contact_message(msg_id: int, db_path: Optional[Path] = None) -> bool:
         return cur.rowcount > 0
 
 
+# --- DUYURU BANDI & DİNAMİK EKONOMİK PARAMETRELER AYARLARI ---
+
+DEFAULT_ANNOUNCEMENT_SETTINGS: Dict[str, str] = {
+    "announcement_enabled": "true",
+    "announcement_text": "🎓 TÜBİTAK 2209-A Finansal Okuryazarlık ve Fon Algı Anketi yayında! Testi çözün ve seviyenizi anında öğrenin.",
+    "announcement_badge": "TÜBİTAK 2209-A",
+    "announcement_bg_color": "indigo",
+    "announcement_link_url": "/survey",
+}
+
+DEFAULT_ECONOMIC_SETTINGS: Dict[str, str] = {
+    "annual_inflation_pct": "33.0",
+    "deposit_rate_pct": "40.0",
+    "default_stopaj_pct": "17.5",
+    "mgmt_fee_default_pct": "2.0",
+}
+
+
+def get_announcement_settings(db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Sitenin en üstündeki duyuru bandı ayarlarını döndürür."""
+    settings = get_settings(db_path)
+    return {
+        "enabled": settings.get("announcement_enabled", DEFAULT_ANNOUNCEMENT_SETTINGS["announcement_enabled"]).lower() == "true",
+        "text": settings.get("announcement_text", DEFAULT_ANNOUNCEMENT_SETTINGS["announcement_text"]),
+        "badge": settings.get("announcement_badge", DEFAULT_ANNOUNCEMENT_SETTINGS["announcement_badge"]),
+        "bg_color": settings.get("announcement_bg_color", DEFAULT_ANNOUNCEMENT_SETTINGS["announcement_bg_color"]),
+        "link_url": settings.get("announcement_link_url", DEFAULT_ANNOUNCEMENT_SETTINGS["announcement_link_url"]),
+    }
+
+
+def update_announcement_settings(updates: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Duyuru bandı ayarlarını günceller."""
+    mapping = {}
+    if "enabled" in updates:
+        mapping["announcement_enabled"] = "true" if updates["enabled"] else "false"
+    if "text" in updates:
+        mapping["announcement_text"] = str(updates["text"])
+    if "badge" in updates:
+        mapping["announcement_badge"] = str(updates["badge"])
+    if "bg_color" in updates:
+        mapping["announcement_bg_color"] = str(updates["bg_color"])
+    if "link_url" in updates:
+        mapping["announcement_link_url"] = str(updates["link_url"])
+
+    with get_connection(db_path) as conn:
+        for k, v in mapping.items():
+            conn.execute(
+                """
+                INSERT INTO system_settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP;
+                """,
+                (k, v),
+            )
+        conn.commit()
+    return get_announcement_settings(db_path)
+
+
+def get_economic_settings(db_path: Optional[Path] = None) -> Dict[str, float]:
+    """Reel Getiri ve simülasyon motorunun kullandığı dinamik enflasyon/faiz/stopaj parametrelerini döndürür."""
+    settings = get_settings(db_path)
+    try:
+        inf = float(settings.get("annual_inflation_pct", DEFAULT_ECONOMIC_SETTINGS["annual_inflation_pct"]))
+    except Exception:
+        inf = 33.0
+    try:
+        dep = float(settings.get("deposit_rate_pct", DEFAULT_ECONOMIC_SETTINGS["deposit_rate_pct"]))
+    except Exception:
+        dep = 40.0
+    try:
+        stp = float(settings.get("default_stopaj_pct", DEFAULT_ECONOMIC_SETTINGS["default_stopaj_pct"]))
+    except Exception:
+        stp = 17.5
+    try:
+        mgt = float(settings.get("mgmt_fee_default_pct", DEFAULT_ECONOMIC_SETTINGS["mgmt_fee_default_pct"]))
+    except Exception:
+        mgt = 2.0
+
+    return {
+        "annual_inflation_pct": inf,
+        "deposit_rate_pct": dep,
+        "default_stopaj_pct": stp,
+        "mgmt_fee_default_pct": mgt,
+    }
+
+
+def update_economic_settings(updates: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, float]:
+    """Dinamik ekonomik parametreleri günceller."""
+    mapping = {}
+    for key in ["annual_inflation_pct", "deposit_rate_pct", "default_stopaj_pct", "mgmt_fee_default_pct"]:
+        if key in updates:
+            mapping[key] = str(float(updates[key]))
+
+    with get_connection(db_path) as conn:
+        for k, v in mapping.items():
+            conn.execute(
+                """
+                INSERT INTO system_settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP;
+                """,
+                (k, v),
+            )
+        conn.commit()
+    return get_economic_settings(db_path)
+
+
+# --- SİSTEM SAĞLIĞI & VERİTABANI FULL JSON BACKUP / RESTORE ---
+
+def create_full_db_backup(db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Tüm SQLite veritabanını (fonlar, fiyatlar, bültenler, kanıtlar, mesajlar, anketler, ayarlar) JSON olarak paketler."""
+    with get_connection(db_path) as conn:
+        def _fetch_all(table_name: str) -> List[Dict[str, Any]]:
+            try:
+                return [dict(r) for r in conn.execute(f"SELECT * FROM {table_name};").fetchall()]
+            except Exception:
+                return []
+
+        backup_payload = {
+            "version": "2.0-tubitak2209a",
+            "backup_created_at": datetime.now().isoformat(),
+            "tables": {
+                "funds": _fetch_all("funds"),
+                "tracked_funds": _fetch_all("tracked_funds"),
+                "fund_prices": _fetch_all("fund_prices"),
+                "bulletins": _fetch_all("bulletins"),
+                "evidence_cards": _fetch_all("evidence_cards"),
+                "contact_messages": _fetch_all("contact_messages"),
+                "survey_questions": _fetch_all("survey_questions"),
+                "survey_responses": _fetch_all("survey_responses"),
+                "system_settings": _fetch_all("system_settings"),
+                "research_logs": _fetch_all("research_logs"),
+            },
+            "summary": {
+                "total_funds": conn.execute("SELECT COUNT(*) as c FROM funds;").fetchone()["c"],
+                "total_prices": conn.execute("SELECT COUNT(*) as c FROM fund_prices;").fetchone()["c"],
+                "total_messages": conn.execute("SELECT COUNT(*) as c FROM contact_messages;").fetchone()["c"],
+            }
+        }
+        return backup_payload
+
+
+def restore_full_db_backup(payload: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    """Dışarıdan gelen JSON yedeğini SQLite veritabanına aktarır (UPSERT / REPLACE ile güvenli geri yükleme)."""
+    tables = payload.get("tables", {})
+    restored_counts = {}
+
+    with get_connection(db_path) as conn:
+        # 1. funds
+        if "funds" in tables and tables["funds"]:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO funds (fund_code, fund_title, fund_type, last_updated)
+                VALUES (:fund_code, :fund_title, :fund_type, CURRENT_TIMESTAMP);
+                """,
+                tables["funds"],
+            )
+            restored_counts["funds"] = len(tables["funds"])
+
+        # 2. tracked_funds
+        if "tracked_funds" in tables and tables["tracked_funds"]:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO tracked_funds (fund_code, fund_title, fund_type, is_default, created_at, last_updated)
+                VALUES (:fund_code, :fund_title, :fund_type, :is_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                """,
+                tables["tracked_funds"],
+            )
+            restored_counts["tracked_funds"] = len(tables["tracked_funds"])
+
+        # 3. fund_prices
+        if "fund_prices" in tables and tables["fund_prices"]:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO fund_prices (fund_code, date, price, investor_count, total_value, source)
+                VALUES (:fund_code, :date, :price, :investor_count, :total_value, :source);
+                """,
+                tables["fund_prices"],
+            )
+            restored_counts["fund_prices"] = len(tables["fund_prices"])
+
+        # 4. bulletins
+        if "bulletins" in tables and tables["bulletins"]:
+            for b in tables["bulletins"]:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO bulletins (
+                        id, fund_code, title, category, doc_type, source_institution,
+                        publish_date, period_covered, original_url, raw_text, ai_summary_json,
+                        content_origin_badge, last_updated
+                    ) VALUES (
+                        :id, :fund_code, :title, :category, :doc_type, :source_institution,
+                        :publish_date, :period_covered, :original_url, :raw_text, :ai_summary_json,
+                        :content_origin_badge, CURRENT_TIMESTAMP
+                    );
+                    """,
+                    b,
+                )
+            restored_counts["bulletins"] = len(tables["bulletins"])
+
+        # 5. contact_messages
+        if "contact_messages" in tables and tables["contact_messages"]:
+            for m in tables["contact_messages"]:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO contact_messages (
+                        id, full_name, email, phone, subject, message, kvkk_approved, is_read, created_at
+                    ) VALUES (
+                        :id, :full_name, :email, :phone, :subject, :message, :kvkk_approved, :is_read, :created_at
+                    );
+                    """,
+                    m,
+                )
+            restored_counts["contact_messages"] = len(tables["contact_messages"])
+
+        # 6. survey_questions & survey_responses
+        if "survey_questions" in tables and tables["survey_questions"]:
+            for sq in tables["survey_questions"]:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO survey_questions (
+                        id, section, question_text, options_json, correct_option_index,
+                        explanation, display_order, is_active, created_at
+                    ) VALUES (
+                        :id, :section, :question_text, :options_json, :correct_option_index,
+                        :explanation, :display_order, :is_active, CURRENT_TIMESTAMP
+                    );
+                    """,
+                    sq,
+                )
+            restored_counts["survey_questions"] = len(tables["survey_questions"])
+
+        if "survey_responses" in tables and tables["survey_responses"]:
+            for sr in tables["survey_responses"]:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO survey_responses (
+                        id, session_id, age_group, education_level, investment_experience,
+                        holds_funds, answers_json, literacy_score, perception_score,
+                        completion_time_sec, created_at
+                    ) VALUES (
+                        :id, :session_id, :age_group, :education_level, :investment_experience,
+                        :holds_funds, :answers_json, :literacy_score, :perception_score,
+                        :completion_time_sec, :created_at
+                    );
+                    """,
+                    sr,
+                )
+            restored_counts["survey_responses"] = len(tables["survey_responses"])
+
+        # 7. system_settings
+        if "system_settings" in tables and tables["system_settings"]:
+            for s in tables["system_settings"]:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO system_settings (key, value, updated_at)
+                    VALUES (:key, :value, CURRENT_TIMESTAMP);
+                    """,
+                    s,
+                )
+            restored_counts["system_settings"] = len(tables["system_settings"])
+
+        conn.commit()
+
+    return {
+        "status": "RESTORED",
+        "restored_tables": restored_counts,
+        "message": "Veritabanı yedeği başarıyla geri yüklendi ve birleştirildi.",
+    }
+
+
 if __name__ == "__main__":
     init_db()
     seed_tracked_funds()
