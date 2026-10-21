@@ -130,8 +130,14 @@ export interface TelemetryEventPayload {
     | "BASKET_SIMULATE"
     | "BULLETIN_OPEN"
     | "BULLETIN_SOURCE_CLICK"
-    | "CONTACT_SUBMIT";
+    | "CONTACT_SUBMIT"
+    | "REAL_RETURN_OPEN"
+    | "REAL_RETURN_SIMULATE"
+    | "REAL_RETURN_BENCHMARK_SELECT"
+    | "GLOSSARY_TERM_READ"
+    | "GLOSSARY_SEARCH";
   module_name: string;
+  page_path?: string | null;
   fund_code?: string | null;
   paired_fund_code?: string | null;
   date_range_label?: string | null;
@@ -155,6 +161,9 @@ export function trackTelemetryEvent(payload: TelemetryEventPayload): void {
     duration_seconds: payload.duration_seconds ?? 0,
     basket_weight_pct: payload.basket_weight_pct ?? null,
     metadata: payload.metadata || null,
+    page_path: payload.page_path || window.location.pathname,
+    screen_width: window.screen?.width || window.innerWidth || null,
+    screen_height: window.screen?.height || window.innerHeight || null,
   });
 
   fetch(`${API_BASE_URL}/api/telemetry/track`, {

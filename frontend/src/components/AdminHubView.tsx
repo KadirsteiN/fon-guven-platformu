@@ -33,6 +33,14 @@ import {
   Mail,
   Activity,
   X,
+  Monitor,
+  Smartphone,
+  Tablet,
+  Search,
+  Calculator,
+  Globe2,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 import {
   API_BASE_URL,
@@ -41,6 +49,7 @@ import {
   clearAdminToken,
   getAdminToken,
   formatNumberTR,
+  formatCurrencyTL,
 } from "@/lib/api";
 import { DEFAULT_LEGAL_TEXTS, LegalTextsMap } from "@/components/Footer";
 
@@ -764,6 +773,8 @@ export default function AdminHubView({
   };
 
   // --- BÖLÜM 3: Telemetri ve Kullanıcı Davranış Analizi Yenileme ---
+  const [downloadingExport, setDownloadingExport] = useState<string | null>(null);
+
   const handleRefreshTelemetry = async () => {
     setLoadingTelemetry(true);
     try {
@@ -773,6 +784,29 @@ export default function AdminHubView({
       // ignore
     } finally {
       setLoadingTelemetry(false);
+    }
+  };
+
+  const handleDownloadExport = async (format: "xlsx" | "csv") => {
+    setDownloadingExport(format);
+    try {
+      const token = getAdminToken() || "";
+      const url = `${API_BASE_URL}/api/admin/telemetry/export?format=${format}&token=${encodeURIComponent(token)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("İndirme başarısız (HTTP " + res.status + ")");
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `tubitak2209a_telemetri_${new Date().toISOString().slice(0, 10)}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (e: any) {
+      alert(`İndirme hatası: ${e.message}`);
+    } finally {
+      setDownloadingExport(null);
     }
   };
 
@@ -3060,19 +3094,43 @@ export default function AdminHubView({
                   Kullanıcıların KVKK uyumlu (anonim oturumlarla) hangi modülde ne kadar vakit geçirdiği, hangi fonları incelediği, karşılaştırdığı ve sepete eklediği gerçek zamanlı olarak raporlanır.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleRefreshTelemetry}
-                disabled={loadingTelemetry}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 self-start shrink-0"
-              >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${
-                    loadingTelemetry ? "animate-spin" : ""
-                  }`}
-                />
-                {loadingTelemetry ? "Yenileniyor..." : "Canlı Verileri Yenile"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadExport("xlsx")}
+                  disabled={downloadingExport !== null}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  {downloadingExport === "xlsx"
+                    ? "İndiriliyor..."
+                    : "📥 Tüm Akademik Verileri İndir (Excel)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadExport("csv")}
+                  disabled={downloadingExport !== null}
+                  className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {downloadingExport === "csv"
+                    ? "İndiriliyor..."
+                    : "📥 Ham Olay Verilerini İndir (CSV)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRefreshTelemetry}
+                  disabled={loadingTelemetry}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${
+                      loadingTelemetry ? "animate-spin" : ""
+                    }`}
+                  />
+                  {loadingTelemetry ? "Yenileniyor..." : "Canlı Verileri Yenile"}
+                </button>
+              </div>
             </div>
 
             {telemetryData?.summary && (
@@ -3127,6 +3185,445 @@ export default function AdminHubView({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* A. GENEL TRAFİK & ZİYARETÇİ ANALİZİ (WEB ANALYTICS & CİHAZ DAĞILIMI) */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1">
+                <Users className="w-3.5 h-3.5" />
+                Web Analitiği & Ziyaretçi Profili
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                Genel Trafik, Donanım & Oturum Terk Analizi
+              </h4>
+              <p className="text-xs text-slate-500">
+                Anonim tekil ziyaretçiler, sayfa görüntüleme sayıları, cihaz/tarayıcı/ekran dağılımı ve hemen çıkma oranları.
+              </p>
+            </div>
+
+            {/* 4 Trafik KPI Kartı */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                <div className="text-[11px] text-slate-500 font-semibold">
+                  Toplam Tekil Ziyaretçi
+                </div>
+                <div className="text-xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">
+                  {telemetryData?.traffic_stats?.total_visitors ?? telemetryData?.summary?.unique_sessions ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Anonim Tekil Kullanıcı
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                <div className="text-[11px] text-slate-500 font-semibold">
+                  Toplam Sayfa Görüntüleme
+                </div>
+                <div className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
+                  {telemetryData?.traffic_stats?.total_pageviews ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Pageviews (Toplam Hit)
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                <div className="text-[11px] text-slate-500 font-semibold">
+                  Son 24 Saatlik Aktif Ziyaretçi
+                </div>
+                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+                  {telemetryData?.traffic_stats?.active_visitors_last_24h ?? 0}
+                </div>
+                <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                  Canlı ve Aktif Oturumlar
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                <div className="text-[11px] text-slate-500 font-semibold">
+                  Hemen Çıkma Oranı (Bounce Rate)
+                </div>
+                <div className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+                  %{formatNumberTR(telemetryData?.traffic_stats?.bounce_rate_pct ?? 0, 1)}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Tek Sayfada Kalan Oturumlar
+                </div>
+              </div>
+            </div>
+
+            {/* 4'lü Donanım ve Tarayıcı Dağılım Kartları */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Cihaz Dağılımı */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <Monitor className="w-3.5 h-3.5 text-blue-600" />
+                  Cihaz Dağılımı
+                </div>
+                <div className="space-y-2">
+                  {(telemetryData?.traffic_stats?.device_breakdown || []).map((d: any) => (
+                    <div key={d.name} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400">{d.name}</span>
+                        <span className="font-bold font-mono">%{d.pct} ({d.count})</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full bg-blue-600 rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(4, d.pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* İşletim Sistemi */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                  İşletim Sistemi (OS)
+                </div>
+                <div className="space-y-2">
+                  {(telemetryData?.traffic_stats?.os_breakdown || []).map((o: any) => (
+                    <div key={o.name} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400">{o.name}</span>
+                        <span className="font-bold font-mono">%{o.pct} ({o.count})</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-600 rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(4, o.pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tarayıcı Dağılımı */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <Globe2 className="w-3.5 h-3.5 text-purple-600" />
+                  Tarayıcı (Browser)
+                </div>
+                <div className="space-y-2">
+                  {(telemetryData?.traffic_stats?.browser_breakdown || []).map((b: any) => (
+                    <div key={b.name} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400">{b.name}</span>
+                        <span className="font-bold font-mono">%{b.pct} ({b.count})</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full bg-purple-600 rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(4, b.pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ekran Çözünürlüğü */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <Smartphone className="w-3.5 h-3.5 text-amber-600" />
+                  Ekran Çözünürlüğü
+                </div>
+                <div className="space-y-2">
+                  {(telemetryData?.traffic_stats?.screen_breakdown || []).map((s: any) => (
+                    <div key={s.name} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-600 dark:text-slate-400 font-mono text-[11px]">{s.name}</span>
+                        <span className="font-bold font-mono text-[11px]">%{s.pct} ({s.count})</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full bg-amber-500 rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(4, s.pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Saatlik ve Haftalık Yoğunluk */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* 24 Saatlik Yoğunluk Bar Haritası */}
+              <div className="lg:col-span-8 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    Saatlik Yoğunluk Dağılımı (00:00 - 23:00)
+                  </span>
+                  <span className="text-[11px] text-slate-500">24 Saatlik Sayfa Hitleri</span>
+                </div>
+                <div className="h-28 flex items-end gap-1 sm:gap-1.5 pt-3">
+                  {(() => {
+                    const hours: number[] = telemetryData?.traffic_stats?.hourly_distribution || Array(24).fill(0);
+                    const maxH = Math.max(1, ...hours);
+                    return hours.map((cnt: number, h: number) => {
+                      const hPct = Math.max(8, Math.round((cnt / maxH) * 100));
+                      return (
+                        <div key={h} className="flex-1 flex flex-col items-center gap-1 group relative">
+                          <div className="absolute -top-7 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-mono opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                            {String(h).padStart(2, "0")}:00 • {cnt} hit
+                          </div>
+                          <div
+                            className={`w-full rounded-t transition-all ${
+                              cnt > 0 ? "bg-blue-600 hover:bg-blue-500" : "bg-slate-200 dark:bg-slate-700"
+                            }`}
+                            style={{ height: `${hPct}%` }}
+                          />
+                          <span className="text-[8px] sm:text-[9px] font-mono text-slate-400">
+                            {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Haftalık Gün Dağılımı */}
+              <div className="lg:col-span-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                    Haftalık Gün Yoğunluğu
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {(() => {
+                    const weekly = telemetryData?.traffic_stats?.weekly_distribution || [];
+                    const maxW = Math.max(1, ...weekly.map((w: any) => w.count || 0));
+                    return weekly.map((w: any) => (
+                      <div key={w.day} className="flex items-center gap-2 text-xs">
+                        <span className="w-8 text-[11px] font-semibold text-slate-500">{w.day}</span>
+                        <div className="flex-1 h-3 rounded bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-600 rounded"
+                            style={{ width: `${Math.min(100, Math.max(4, Math.round((w.count / maxW) * 100)))}%` }}
+                          />
+                        </div>
+                        <span className="w-8 text-right font-mono font-bold text-[11px]">{w.count}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {/* Kullanıcı Akışı & Sayfa Terk Analizi */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Giriş Sayfaları (Landing Pages) */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  En Çok Giriş Yapılan Sayfalar (Landing)
+                </div>
+                <div className="space-y-1.5">
+                  {(telemetryData?.traffic_stats?.top_landing_pages || []).map((lp: any) => (
+                    <div key={lp.page} className="flex items-center justify-between text-xs">
+                      <span className="font-mono text-blue-600 dark:text-blue-400 text-[11px] truncate max-w-[150px]">
+                        {lp.page}
+                      </span>
+                      <span className="font-mono font-bold">{lp.count} ({lp.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Çıkış Sayfaları (Exit Pages) */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  En Çok Terk Edilen Sayfalar (Exit)
+                </div>
+                <div className="space-y-1.5">
+                  {(telemetryData?.traffic_stats?.top_exit_pages || []).map((ep: any) => (
+                    <div key={ep.page} className="flex items-center justify-between text-xs">
+                      <span className="font-mono text-rose-600 dark:text-rose-400 text-[11px] truncate max-w-[150px]">
+                        {ep.page}
+                      </span>
+                      <span className="font-mono font-bold">{ep.count} ({ep.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* En Sık İzlenen Rotalar (Top Flows) */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Sık İzlenen Ziyaretçi Rotaları (Flows)
+                </div>
+                <div className="space-y-1.5">
+                  {(telemetryData?.traffic_stats?.top_flows || []).map((f: any) => (
+                    <div key={f.flow} className="flex items-center justify-between text-xs">
+                      <span className="font-mono text-[10px] text-slate-600 dark:text-slate-300 truncate max-w-[170px]" title={f.flow}>
+                        {f.flow}
+                      </span>
+                      <span className="font-mono font-bold text-emerald-600">{f.count} kez</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* B. REEL GETİRİ SİMÜLATÖRÜ & FİNANSAL SÖZLÜK ETKİLEŞİM ANALİZİ */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Sol: Reel Getiri Simülatörü */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-full mb-1">
+                  <Calculator className="w-3.5 h-3.5" />
+                  Reel Getiri Simülatörü Etkileşimi
+                </div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Enflasyon, Stopaj & Küresel Benchmark Kullanım Analizi
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Kullanıcıların simülatörü açma oranı, hesaplama sıklığı ve en çok karşılaştırdığı alternatif yatırım araçları.
+                </p>
+              </div>
+
+              {/* 3 KPI */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Simülatör Açılma</div>
+                  <div className="text-lg font-extrabold text-purple-600 dark:text-purple-400 mt-0.5">
+                    {telemetryData?.real_return_stats?.total_opens || 0} kez
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Hesaplama / Simüle</div>
+                  <div className="text-lg font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
+                    {telemetryData?.real_return_stats?.total_simulations || 0} kez
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Ort. Test Tutarı</div>
+                  <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 font-mono truncate">
+                    {formatCurrencyTL(telemetryData?.real_return_stats?.avg_investment_tl || 100000)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Karşılaştırılan Alternatif Yatırım Araçları Popülerliği */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  En Çok Tercih Edilen Alternatif Yatırım Araçları (Benchmark Popülerliği)
+                </div>
+                <div className="space-y-2">
+                  {(telemetryData?.real_return_stats?.benchmark_popularity || []).map((b: any) => (
+                    <div key={b.benchmark_key} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{b.benchmark_label}</span>
+                        <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
+                          {b.count} seçim (%{b.pct})
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                          className="h-full bg-purple-600 rounded-full"
+                          style={{ width: `${Math.min(100, Math.max(5, b.pct))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Sağ: Finansal Sözlük & SPK Mevzuatı */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-full mb-1">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Finansal Sözlük & SPK Mevzuatı Etkileşimi
+                </div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Sözlük Okunma, Arama & Kategori İlgi Dağılımı
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Kullanıcıların en çok incelediği finansal kavramlar, SPK maddeleri ve anlık arama sorguları.
+                </p>
+              </div>
+
+              {/* 2 KPI */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Toplam Terim Okunma</div>
+                  <div className="text-lg font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">
+                    {telemetryData?.glossary_stats?.total_reads || 0} kez
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] text-slate-500 font-semibold">Toplam Arama Sorgusu</div>
+                  <div className="text-lg font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
+                    {telemetryData?.glossary_stats?.total_searches || 0} sorgu
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* En Çok Okunan Terimler */}
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    En Çok Okunan Terimler
+                  </div>
+                  <div className="space-y-1">
+                    {(telemetryData?.glossary_stats?.top_terms || []).slice(0, 5).map((t: any, idx: number) => (
+                      <div key={t.term_id} className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-50 dark:bg-slate-800/40">
+                        <span className="truncate max-w-[130px] font-medium text-slate-800 dark:text-slate-200">
+                          {idx + 1}. {t.term_title}
+                        </span>
+                        <span className="font-mono font-bold text-amber-600">{t.count} kez</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* En Sık Aratılan Kelimeler */}
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Sık Aranan Kelimeler
+                  </div>
+                  <div className="space-y-1">
+                    {(telemetryData?.glossary_stats?.top_searches || []).slice(0, 5).map((s: any) => (
+                      <div key={s.query} className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-50 dark:bg-slate-800/40">
+                        <span className="font-mono text-blue-600 text-[11px] truncate max-w-[130px]">
+                          &ldquo;{s.query}&rdquo;
+                        </span>
+                        <span className="font-mono font-bold">{s.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Kategori Bazında İlgi Dağılımı */}
+              <div className="space-y-1.5 pt-1">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Kategori Bazında İlgi Dağılımı
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(telemetryData?.glossary_stats?.category_breakdown || []).map((cat: any) => (
+                    <div key={cat.category_name} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-xs">
+                      <div className="text-slate-500 text-[11px] truncate">{cat.category_name}</div>
+                      <div className="flex justify-between font-bold mt-0.5">
+                        <span className="text-amber-600">%{cat.pct}</span>
+                        <span className="text-slate-400 font-mono text-[10px]">{cat.count} okuma</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 1. Modül ve Sayfa Bazlı İstatistikler */}
@@ -3217,6 +3714,9 @@ export default function AdminHubView({
                       Sanal Sepet Eklenme & Ort. Ağırlık %
                     </th>
                     <th className="p-3 font-bold text-right">
+                      Reel Getiri Testi
+                    </th>
+                    <th className="p-3 font-bold text-right">
                       Fon Üzerinde Geçirilen Süre
                     </th>
                   </tr>
@@ -3254,6 +3754,9 @@ export default function AdminHubView({
                         <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">
                           (Ort. %{formatNumberTR(f.avg_basket_weight_pct, 1)})
                         </span>
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-purple-600 dark:text-purple-400">
+                        {f.real_return_tests || 0} kez
                       </td>
                       <td className="p-3 text-right font-mono">
                         <span className="font-bold">

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { API_BASE_URL, apiFetch, formatNumberTR } from "@/lib/api";
 import SvgLineChart from "@/components/SvgLineChart";
+import RealReturnSimulator from "@/components/RealReturnSimulator";
 
 const PALETTE = [
   "#2563eb",
@@ -531,6 +532,14 @@ export default function AnalyticsPage() {
               </span>
             </div>
           </div>
+
+          {/* İsteğe Bağlı Açılan Reel Getiri & Küresel Benchmark Simülatörü (GÖREV 2) */}
+          <RealReturnSimulator
+            fundCodes={selectedCodes}
+            startDate={data.actual_start_date || startDate}
+            endDate={data.actual_end_date || endDate}
+            defaultAmount={100000}
+          />
         </>
       )}
     </div>

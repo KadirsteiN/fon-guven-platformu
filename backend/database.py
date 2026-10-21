@@ -294,6 +294,30 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     f"ALTER TABLE analytics_events ADD COLUMN {col_def[0]} {col_def[1]};"
                 )
 
+        # 17. traffic_logs tablosu (Ziyaretçi trafiği, cihaz/tarayıcı/ekran ve akış yolu analizi)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS traffic_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                page_path TEXT NOT NULL,
+                is_entry INTEGER NOT NULL DEFAULT 0,
+                device_type TEXT,
+                os_name TEXT,
+                browser_name TEXT,
+                screen_width INTEGER,
+                screen_height INTEGER,
+                created_at TEXT NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_traffic_logs_session
+            ON traffic_logs (session_id, created_at);
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_analytics_events_type
+            ON analytics_events (event_type, created_at);
+        """)
+
         # Sorgu performansı için indeksler
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_fund_prices_code_date
@@ -852,8 +876,23 @@ def insert_contact_message(
     kvkk_approved: bool = True,
     db_path: Optional[Path] = None,
 ) -> int:
-    """Yeni bir iletişim mesajı kaydeder ve ID döndürür."""
+    """Yeni bir iletişim mesajı kaydeder ve ID döndürür (tablo yoksa otomatik oluşturur)."""
     with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS contact_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                full_name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                message TEXT NOT NULL,
+                kvkk_approved INTEGER NOT NULL DEFAULT 1,
+                is_read INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
         cur = conn.execute(
             """
             INSERT INTO contact_messages (

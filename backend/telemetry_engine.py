@@ -32,6 +32,7 @@ MODULE_DEFINITIONS: List[Dict[str, str]] = [
     {"key": "bulletins", "label": "Fon Bültenleri & Raporlar", "path": "/bulletins"},
     {"key": "analytics", "label": "Fon Performans Analizi", "path": "/analytics"},
     {"key": "baskets", "label": "Sanal Sepet Laboratuvarı", "path": "/baskets"},
+    {"key": "glossary", "label": "Finansal Sözlük & SPK Rehberi", "path": "/glossary"},
     {"key": "contact", "label": "Proje Künyesi & İletişim", "path": "/contact"},
 ]
 
@@ -40,6 +41,10 @@ def _normalize_module_key(module_name: Optional[str], route_path: Optional[str] 
     raw = (module_name or route_path or "").strip().lower()
     if raw in ("home", "/", "dashboard", "ana sayfa"):
         return "home"
+    if "realreturn" in raw or "reel" in raw:
+        return "realreturn"
+    if "glossary" in raw or "sozluk" in raw or "sözlük" in raw or "dictionary" in raw:
+        return "glossary"
     if "evidence" in raw or "kanit" in raw or "güven" in raw:
         return "evidence"
     if "transparency" in raw or "seffaflik" in raw or "şeffaflık" in raw:
@@ -165,6 +170,23 @@ def _build_turkish_activity_description(row: Dict[str, Any]) -> str:
         if dur > 0:
             return f"Bir kullanıcı '{mod_label}' sayfasında {int(round(dur))} saniye vakit geçirdi"
 
+    if ev_type == "REAL_RETURN_OPEN":
+        return f"Bir kullanıcı{(' ' + fund + ' fonu için') if fund else ''} Reel Getiri & Benchmark Simülatörünü açtı"
+
+    if ev_type == "REAL_RETURN_SIMULATE":
+        amt = meta.get("initial_amount_tl")
+        amt_txt = f" ({int(float(amt)):,} TL)".replace(",", ".") if amt else ""
+        return f"Bir kullanıcı{(' ' + fund + ' fonunun') if fund else ''} net reel getirisini hesapladı{amt_txt}"
+
+    if ev_type == "REAL_RETURN_BENCHMARK_SELECT":
+        return f"Bir kullanıcı fonu '{meta.get('benchmark_label') or meta.get('benchmark') or 'benchmark'}' ile kıyasladı"
+
+    if ev_type == "GLOSSARY_TERM_READ":
+        return f"Bir kullanıcı sözlükte '{meta.get('term') or 'bir terim'}' kartını okudu"
+
+    if ev_type == "GLOSSARY_SEARCH":
+        return f"Bir kullanıcı sözlükte '{meta.get('query') or ''}' ifadesini aradı"
+
     if ev_type == "CONTACT_SUBMIT":
         subj = meta.get("subject") or "Geri Bildirim"
         return f"Bir araştırmacı/kullanıcı '{subj}' konulu iletişim mesajı gönderdi"
@@ -188,8 +210,13 @@ def record_telemetry_event(
     metadata: Optional[Dict[str, Any]] = None,
     created_at: Optional[str] = None,
     db_path: Optional[Path] = None,
+    page_path: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    screen_width: Optional[int] = None,
+    screen_height: Optional[int] = None,
 ) -> int:
-    """Tekil bir kullanıcı etkileşim/telemetri olayını `analytics_events` tablosuna yazar."""
+    """Tekil bir kullanıcı etkileşim/telemetri olayını `analytics_events` tablosuna yazar.
+    PAGE_VIEW olaylarında ayrıca trafik/cihaz analizi için `traffic_logs` kaydı oluşturur."""
     norm_mod = _normalize_module_key(module_name)
     clean_fund = fund_code.strip().upper() if fund_code and fund_code.strip() else None
     clean_paired = paired_fund_code.strip().upper() if paired_fund_code and paired_fund_code.strip() else None
@@ -229,8 +256,38 @@ def record_telemetry_event(
                 ts,
             ),
         )
+        event_id = int(cursor.lastrowid)
+
+        if event_type.strip().upper() == "PAGE_VIEW":
+            from telemetry_extras import parse_user_agent
+
+            sid = session_id or "anon-session"
+            path_val = (page_path or ("/" if norm_mod == "home" else f"/{norm_mod}")).strip() or "/"
+            prev = conn.execute(
+                "SELECT 1 FROM traffic_logs WHERE session_id = ? LIMIT 1", (sid,)
+            ).fetchone()
+            ua = parse_user_agent(user_agent or "", screen_width)
+            conn.execute(
+                """
+                INSERT INTO traffic_logs (
+                    session_id, page_path, is_entry, device_type, os_name, browser_name,
+                    screen_width, screen_height, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sid,
+                    path_val,
+                    0 if prev else 1,
+                    ua["device_type"],
+                    ua["os_name"],
+                    ua["browser_name"],
+                    int(screen_width) if screen_width else None,
+                    int(screen_height) if screen_height else None,
+                    ts,
+                ),
+            )
         conn.commit()
-        return int(cursor.lastrowid)
+        return event_id
 
 
 def seed_telemetry_events(db_path: Optional[Path] = None) -> int:
@@ -730,6 +787,12 @@ def get_telemetry_dashboard_data(db_path: Optional[Path] = None) -> Dict[str, An
                 }
             )
 
+    from telemetry_extras import compute_dashboard_extras
+
+    extras = compute_dashboard_extras(
+        module_stats=module_stats, fund_matrix=fund_matrix, db_path=db_path
+    )
+
     tot_sec = float(summary_row["total_duration_seconds"] or 0.0)
     return {
         "summary": {
@@ -751,4 +814,7 @@ def get_telemetry_dashboard_data(db_path: Optional[Path] = None) -> Dict[str, An
         "bulletin_stats": bulletin_stats,
         "daily_trend": daily_trend,
         "live_feed": live_feed,
+        "traffic_stats": extras["traffic_stats"],
+        "real_return_stats": extras["real_return_stats"],
+        "glossary_stats": extras["glossary_stats"],
     }

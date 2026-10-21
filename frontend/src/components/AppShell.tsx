@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   RefreshCw,
   MessageSquare,
+  BookOpen,
 } from "lucide-react";
 import { API_BASE_URL, apiFetch, trackTelemetryEvent } from "@/lib/api";
 
@@ -50,6 +51,11 @@ const NAV_ITEMS = [
     href: "/baskets",
     label: "Sanal Sepet Laboratuvarı",
     icon: Briefcase,
+  },
+  {
+    href: "/glossary",
+    label: "Finansal Sözlük & SPK Rehberi",
+    icon: BookOpen,
   },
   {
     href: "/contact",

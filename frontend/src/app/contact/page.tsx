@@ -72,7 +72,7 @@ export default function ContactPage() {
 
     setSubmitting(true);
     try {
-      const res = await apiFetch<any>("/api/public/contact", {
+      const res = await apiFetch<any>("/api/contact", {
         method: "POST",
         body: JSON.stringify({
           full_name: fullName.trim(),

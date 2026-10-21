@@ -4,13 +4,13 @@ import React, { useEffect, useState } from "react";
 import {
   Briefcase,
   Play,
-  Save,
   AlertTriangle,
   Plus,
   Trash2,
 } from "lucide-react";
-import { apiFetch, formatCurrencyTL, formatNumberTR } from "@/lib/api";
+import { apiFetch, formatCurrencyTL, formatNumberTR, trackTelemetryEvent } from "@/lib/api";
 import SvgLineChart from "@/components/SvgLineChart";
+import RealReturnSimulator from "@/components/RealReturnSimulator";
 
 export default function BasketsPage() {
   const [availableFunds, setAvailableFunds] = useState<string[]>([
@@ -32,13 +32,10 @@ export default function BasketsPage() {
     { fund_code: "MAC", amount_tl: 8000 },
   ]);
   const [simResult, setSimResult] = useState<any>(null);
-  const [savedBaskets, setSavedBaskets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   const runSimulation = async () => {
     setLoading(true);
-    setSaveMessage(null);
     try {
       const res = await apiFetch<any>("/api/baskets/simulate", {
         method: "POST",
@@ -49,14 +46,21 @@ export default function BasketsPage() {
         }),
       });
       setSimResult(res);
+      // Arka planda telemetri için fon kodları ve tutar kaydedilir
+      trackTelemetryEvent({
+        event_type: "BASKET_SIMULATE",
+        module_name: "baskets",
+        metadata: {
+          fund_codes: allocations.map((a) => a.fund_code),
+          total_amount: allocations.reduce(
+            (sum, a) => sum + (Number(a.amount_tl) || 0),
+            0
+          ),
+        },
+      });
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchSavedBaskets = async () => {
-    const res = await apiFetch<any>("/api/baskets");
-    setSavedBaskets(res.baskets || []);
   };
 
   useEffect(() => {
@@ -66,23 +70,7 @@ export default function BasketsPage() {
       }
     });
     runSimulation();
-    fetchSavedBaskets();
   }, []);
-
-  const handleSaveBasket = async () => {
-    const res = await apiFetch<any>("/api/baskets/save", {
-      method: "POST",
-      body: JSON.stringify({
-        basket_name: basketName,
-        allocations,
-        start_date: startDate,
-        end_date: endDate,
-      }),
-    });
-    setSimResult(res.simulation);
-    setSaveMessage(`Sepet SQLite veritabanına kaydedildi (ID #${res.basket_id}).`);
-    fetchSavedBaskets();
-  };
 
   const updateAllocation = (
     idx: number,
@@ -236,28 +224,14 @@ export default function BasketsPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              onClick={runSimulation}
-              disabled={loading}
-              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
-            >
-              <Play className="w-3.5 h-3.5" />
-              Sepeti Simüle Et
-            </button>
-            <button
-              onClick={handleSaveBasket}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
-            >
-              <Save className="w-3.5 h-3.5" />
-              Sepeti Veritabanına Kaydet
-            </button>
-          </div>
-          {saveMessage && (
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              {saveMessage}
-            </span>
-          )}
+          <button
+            onClick={runSimulation}
+            disabled={loading}
+            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+          >
+            <Play className="w-3.5 h-3.5" />
+            {loading ? "Simüle Ediliyor..." : "Sepeti Anlık Simüle Et"}
+          </button>
         </div>
       </div>
 
@@ -438,6 +412,15 @@ export default function BasketsPage() {
             <p>• {simResult.limitations_notice?.gross_calculation_warning}</p>
             <p>• {simResult.limitations_notice?.management_fee_note}</p>
           </div>
+
+          {/* İsteğe Bağlı Açılan Reel Getiri & Küresel Benchmark Simülatörü (GÖREV 2) */}
+          <RealReturnSimulator
+            fundCodes={allocations.map((a) => a.fund_code)}
+            weightsPct={simResult.items_breakdown?.map((item: any) => item.initial_weight_pct)}
+            startDate={simResult.actual_start_date || startDate}
+            endDate={simResult.actual_end_date || endDate}
+            defaultAmount={simResult.total_initial_amount_tl || 100000}
+          />
         </>
       )}
     </div>

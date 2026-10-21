@@ -28,7 +28,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from database import (
     init_db,
@@ -102,6 +102,8 @@ from snapshot_manager import (
     sync_fund_to_snapshot,
     export_db_to_snapshot,
 )
+from benchmark_engine import compute_real_return
+from telemetry_extras import build_events_csv, build_academic_workbook
 
 
 # --- .env Yükleyici ve Klasör Hazırlığı ---
@@ -423,12 +425,22 @@ class ResearchLogCreateRequest(BaseModel):
 
 
 class ContactMessageCreateRequest(BaseModel):
-    full_name: str = Field(..., min_length=2, example="Arş. Gör. Zeynep Kaya")
-    email: str = Field(..., min_length=5, example="zeynep.kaya@universite.edu.tr")
-    phone: str = Field(..., min_length=10, example="0532 418 72 90")
-    subject: str = Field(..., example="Akademik İş Birliği")
-    message: str = Field(..., min_length=5, example="TÜBİTAK 2209-A projeniz kapsamında görüşmek isteriz.")
-    kvkk_approved: bool = Field(..., example=True)
+    """Esnek iletişim formu şeması: alan adı varyasyonlarını kabul eder, 422 yerine anlamlı hata döndürür."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    full_name: str = Field(
+        default="Anonim Kullanıcı",
+        validation_alias=AliasChoices("full_name", "fullName", "name", "ad_soyad"),
+    )
+    email: str = Field(default="", validation_alias=AliasChoices("email", "e_mail", "mail"))
+    phone: str = Field(default="", validation_alias=AliasChoices("phone", "telephone", "tel", "telefon"))
+    subject: str = Field(default="Diğer", validation_alias=AliasChoices("subject", "konu", "topic"))
+    message: str = Field(default="", validation_alias=AliasChoices("message", "mesaj", "content", "text"))
+    kvkk_approved: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("kvkk_approved", "kvkk", "kvkkApproved", "consent"),
+    )
 
 
 class ContactMessageReadUpdateRequest(BaseModel):
@@ -446,6 +458,21 @@ class TelemetryTrackRequest(BaseModel):
     duration_seconds: float = Field(default=0.0, ge=0.0)
     basket_weight_pct: Optional[float] = Field(default=None)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
+    page_path: Optional[str] = Field(default=None)
+    screen_width: Optional[int] = Field(default=None)
+    screen_height: Optional[int] = Field(default=None)
+
+
+class RealReturnRequest(BaseModel):
+    fund_codes: List[str] = Field(..., example=["AFT"])
+    start_date: str = Field(..., example="2026-01-03")
+    end_date: str = Field(..., example="2026-10-16")
+    initial_amount_tl: float = Field(default=100000.0, gt=0)
+    weights_pct: Optional[List[float]] = Field(default=None)
+    annual_mgmt_fee_pct: float = Field(default=2.0, ge=0, le=15)
+    stopaj_pct: float = Field(default=17.5, ge=0, le=40)
+    annual_inflation_pct: float = Field(default=33.0, ge=-5, le=500)
+    deposit_rate_pct: float = Field(default=40.0, ge=0, le=500)
 
 
 # --- GENEL (PUBLIC) SİSTEM & SENKRONİZASYON UÇ NOKTALARI ---
@@ -1603,33 +1630,39 @@ def api_ask_assistant(req: AssistantAskRequest) -> Dict[str, Any]:
 # --- BÖLÜM 2: PROJE KÜNYESİ & İLETİŞİM MODÜLÜ (/contact) VE ADMİN GELEN KUTUSU ---
 
 @app.post("/api/public/contact")
+@app.post("/api/contact")
 def api_submit_contact_message(req: ContactMessageCreateRequest) -> Dict[str, Any]:
     """
     Kullanıcıların /contact sayfasından gönderdiği akademik iş birliği, veri hatası
     bildirimi ve geri bildirim mesajlarını KVKK açık rıza doğrulamasıyla kaydeder.
+    (`/api/contact` ve `/api/public/contact` aynı işleyiciye bağlıdır; başarıda 200 OK döner.)
     """
     if not req.kvkk_approved:
         raise HTTPException(
             status_code=400,
             detail="Mesaj gönderebilmek için 6698 sayılı KVKK açık rıza onay kutucuğunu işaretlemeniz gerekmektedir.",
         )
+    if not (req.message or "").strip():
+        raise HTTPException(status_code=400, detail="Lütfen bir mesaj yazınız.")
 
     import re
     digits_only = re.sub(r"\D", "", req.phone or "")
-    if not (len(digits_only) == 11 and digits_only.startswith("05")):
+    if digits_only and len(digits_only) < 10:
         raise HTTPException(
             status_code=400,
             detail="Lütfen geçerli bir cep telefonu numarası giriniz (Örn: 05XX XXX XX XX).",
         )
-
-    formatted_phone = f"{digits_only[0:4]} {digits_only[4:7]} {digits_only[7:9]} {digits_only[9:11]}"
+    if len(digits_only) == 11 and digits_only.startswith("0"):
+        formatted_phone = f"{digits_only[0:4]} {digits_only[4:7]} {digits_only[7:9]} {digits_only[9:11]}"
+    else:
+        formatted_phone = (req.phone or "").strip() or "-"
 
     try:
-        saved = insert_contact_message(
-            full_name=req.full_name,
-            email=req.email,
+        saved_id = insert_contact_message(
+            full_name=(req.full_name or "Anonim Kullanıcı"),
+            email=(req.email or "-"),
             phone=formatted_phone,
-            subject=req.subject,
+            subject=(req.subject or "Diğer"),
             message=req.message,
             kvkk_approved=req.kvkk_approved,
         )
@@ -1644,10 +1677,10 @@ def api_submit_contact_message(req: ContactMessageCreateRequest) -> Dict[str, An
         return {
             "status": "SUBMITTED",
             "message": "Mesajınız proje araştırma ekibine başarıyla iletildi. Katkınız için teşekkür ederiz.",
-            "contact_message": saved,
+            "contact_message": {"id": saved_id},
         }
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Mesaj kaydedilemedi: {exc}") from exc
 
 
 @app.get("/api/admin/contact-messages")
@@ -1699,11 +1732,14 @@ def api_admin_delete_contact_message(
 # --- BÖLÜM 3: ULTRA DETAYLI KULLANICI DAVRANIŞI VE FON TELEMETRİ SİSTEMİ ---
 
 @app.post("/api/telemetry/track")
-def api_track_telemetry_event(req: TelemetryTrackRequest) -> Dict[str, Any]:
+def api_track_telemetry_event(
+    req: TelemetryTrackRequest,
+    user_agent: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
     """
     Frontend'den gelen anonim kullanıcı etkileşimlerini (sayfa görüntüleme,
     sayfada kalma süresi, fon inceleme, ikili fon karşılaştırma, sanal sepet
-    ağırlıklandırma, bülten okuma/kaynak tıklama) kaydeder.
+    ağırlıklandırma, bülten okuma/kaynak tıklama, reel getiri, sözlük) kaydeder.
     """
     event_id = record_telemetry_event(
         session_id=req.session_id,
@@ -1716,8 +1752,81 @@ def api_track_telemetry_event(req: TelemetryTrackRequest) -> Dict[str, Any]:
         duration_seconds=req.duration_seconds,
         basket_weight_pct=req.basket_weight_pct,
         metadata=req.metadata,
+        page_path=req.page_path,
+        user_agent=user_agent,
+        screen_width=req.screen_width,
+        screen_height=req.screen_height,
     )
     return {"status": "RECORDED", "event_id": event_id}
+
+
+@app.post("/api/analytics/real-return")
+def api_real_return_simulation(req: RealReturnRequest) -> Dict[str, Any]:
+    """
+    Net Reel Getiri (brüt → yönetim ücreti → stopaj → TÜFE) ve küresel/yerel benchmark
+    karşılaştırması. Fon verisi eksikse anında TEFAS/snapshot'tan tamamlanır.
+    """
+    try:
+        res = compute_real_return(
+            fund_codes=req.fund_codes,
+            start_date=req.start_date,
+            end_date=req.end_date,
+            initial_amount_tl=req.initial_amount_tl,
+            weights_pct=req.weights_pct,
+            annual_mgmt_fee_pct=req.annual_mgmt_fee_pct,
+            stopaj_pct=req.stopaj_pct,
+            annual_inflation_pct=req.annual_inflation_pct,
+            deposit_rate_pct=req.deposit_rate_pct,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        for code in res["fund_codes"]:
+            record_telemetry_event(
+                event_type="REAL_RETURN_SIMULATE",
+                module_name="realreturn",
+                fund_code=code,
+                metadata={
+                    "initial_amount_tl": req.initial_amount_tl,
+                    "start_date": req.start_date,
+                    "end_date": req.end_date,
+                    "fund_codes": res["fund_codes"],
+                },
+            )
+    except Exception:
+        pass
+    return res
+
+
+@app.get("/api/admin/telemetry/export")
+def api_admin_export_telemetry(
+    format: str = Query(default="xlsx"),
+    token: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> StreamingResponse:
+    """TÜBİTAK raporu için tüm telemetri istatistiklerini Excel (.xlsx) veya ham olay CSV olarak indirir."""
+    effective_token = token
+    if not effective_token and authorization and authorization.startswith("Bearer "):
+        effective_token = authorization.replace("Bearer ", "", 1).strip()
+    if effective_token != ADMIN_SECRET_TOKEN:
+        raise HTTPException(status_code=401, detail="Yetkisiz erişim.")
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    if format.lower() == "csv":
+        content = build_events_csv()
+        return StreamingResponse(
+            iter([content]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="tubitak_telemetri_ham_olaylar_{stamp}.csv"'},
+        )
+
+    content = build_academic_workbook(get_telemetry_dashboard_data())
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="tubitak_telemetri_akademik_veriler_{stamp}.xlsx"'},
+    )
 
 
 @app.get("/api/admin/telemetry/dashboard")
