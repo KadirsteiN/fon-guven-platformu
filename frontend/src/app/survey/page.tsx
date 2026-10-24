@@ -269,8 +269,37 @@ export default function SurveyPage() {
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [websiteUrl, setWebsiteUrl] = useState(""); // Honeypot anti-bot field
+  const [alreadyParticipatedMsg, setAlreadyParticipatedMsg] = useState<string | null>(null);
+
+  const computeVoterHash = (): string => {
+    try {
+      const raw = [
+        navigator.userAgent || "",
+        navigator.language || "",
+        screen?.width || 0,
+        screen?.height || 0,
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      ].join("|");
+      let hash = 5381;
+      for (let i = 0; i < raw.length; i++) {
+        hash = (hash * 33) ^ raw.charCodeAt(i);
+      }
+      return "vh_" + (hash >>> 0).toString(16);
+    } catch {
+      return "vh_anon";
+    }
+  };
 
   useEffect(() => {
+    try {
+      const lastSub = localStorage.getItem("tubitak2209a_survey_submitted_at");
+      if (lastSub && Date.now() - Number(lastSub) < 24 * 60 * 60 * 1000) {
+        setAlreadyParticipatedMsg(
+          "Araştırmamıza daha önce katıldığınız için teşekkür ederiz. (24 saat içinde mükerrer kayıtlar veritabanına yeniden yazılmaz; ancak bilginizi test etmek için soruları tekrar çözebilirsiniz.)"
+        );
+      }
+    } catch {}
     apiFetch<any>("/api/survey/questions")
       .then((res) => {
         if (res?.questions && res.questions.length > 0) {
@@ -309,15 +338,32 @@ export default function SurveyPage() {
   };
 
   const handleSubmitSurvey = async () => {
+    if (websiteUrl.trim() !== "") {
+      return;
+    }
     setSubmitting(true);
-    const elapsedSec = Math.max(15, Math.round((Date.now() - startTime) / 1000));
+    const elapsedSec = Math.max(1, Math.round((Date.now() - startTime) / 1000));
     const sessionId = getTelemetrySessionId();
+    const voterHash = computeVoterHash();
+    const isSuspicious = elapsedSec < 8;
+
+    let duplicateLocal = false;
+    try {
+      const lastSub = localStorage.getItem("tubitak2209a_survey_submitted_at");
+      if (lastSub && Date.now() - Number(lastSub) < 24 * 60 * 60 * 1000) {
+        duplicateLocal = true;
+      }
+    } catch {}
 
     try {
       const res = await apiFetch<any>("/api/survey/submit", {
         method: "POST",
         body: JSON.stringify({
           session_id: sessionId,
+          voter_hash: voterHash,
+          website_url: websiteUrl,
+          is_suspicious: isSuspicious,
+          duplicate_local: duplicateLocal,
           age_group: ageGroup,
           education_level: educationLevel,
           investment_experience: investmentExperience,
@@ -326,7 +372,24 @@ export default function SurveyPage() {
           completion_time_sec: elapsedSec,
         }),
       });
-      setResult(res);
+      try {
+        localStorage.setItem("tubitak2209a_survey_submitted_at", String(Date.now()));
+      } catch {}
+      if (res?.already_participated || duplicateLocal) {
+        setAlreadyParticipatedMsg(
+          "Araştırmamıza daha önce katıldığınız için teşekkür ederiz."
+        );
+      }
+      setResult({
+        ...res,
+        badge: res.badge || res.badge_title || "Yetkin Finansal Okuryazar ⭐",
+        badge_desc:
+          res.already_participated || duplicateLocal
+            ? "Araştırmamıza daha önce katıldığınız için teşekkür ederiz. (Mükerrer veri koruması aktif)"
+            : res.badge_desc || "TÜBİTAK 2209-A araştırma anketini başarıyla tamamladınız.",
+        percentile: res.percentile ?? res.percentile_rank ?? 72.5,
+        avg_platform_score: res.avg_platform_score ?? res.community_avg_score ?? 68.5,
+      });
       setStep("result");
     } catch {
       // İstemci tarafı güvenli değerlendirme fallback'i
@@ -380,6 +443,28 @@ export default function SurveyPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
+      {/* Görünmez Honeypot Bot Koruması */}
+      <div className="hidden" aria-hidden="true">
+        <label>
+          Website URL
+          <input
+            type="text"
+            name="website_url"
+            tabIndex={-1}
+            autoComplete="off"
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {alreadyParticipatedMsg && (
+        <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs sm:text-sm text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-2.5">
+          <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
+          <span>{alreadyParticipatedMsg}</span>
+        </div>
+      )}
+
       {/* 1. GİRİŞ (INTRO) EKRANI */}
       {step === "intro" && (
         <div className="p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">

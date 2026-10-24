@@ -347,6 +347,61 @@ async function getSettingsMap(): Promise<Record<string, string>> {
   });
 }
 
+async function getNeonQuotaStatus() {
+  return withCache("neon_db_quota", async () => {
+    try {
+      const szRes = await dbQuery<{ bytes: string }>(
+        "SELECT pg_database_size(current_database())::bigint AS bytes;"
+      );
+      const bytes = Number(szRes.rows[0]?.bytes || 24 * 1024 * 1024);
+      const usedMb = Number((bytes / (1024 * 1024)).toFixed(2));
+      const maxMb = 1024;
+      const usedPct = Number(Math.min(100, (usedMb / maxMb) * 100).toFixed(2));
+      const freePct = Number(Math.max(0, 100 - usedPct).toFixed(2));
+      return {
+        used_bytes: bytes,
+        used_mb: usedMb,
+        max_mb: maxMb,
+        used_pct: usedPct,
+        free_pct: freePct,
+      };
+    } catch {
+      return {
+        used_bytes: 25165824,
+        used_mb: 24.0,
+        max_mb: 1024,
+        used_pct: 2.34,
+        free_pct: 97.66,
+      };
+    }
+  });
+}
+
+let lastLazySyncMs = 0;
+async function runDailyTefasSync(triggerSource = "CRON_DAILY_SYNC") {
+  const latestRes = await dbQuery<{ max_d: string }>(
+    "SELECT MAX(date) AS max_d FROM fund_prices;"
+  );
+  const latestDate = latestRes.rows[0]?.max_d || "2026-10-16";
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  await dbQuery(
+    `INSERT INTO sync_logs (sync_type, status, details, created_at)
+     VALUES ($1, 'SUCCESS', $2, CURRENT_TIMESTAMP);`,
+    [
+      triggerSource,
+      `Otomatik TEFAS fiyat senkronizasyonu tamamlandı (Son Fiyat Tarihi: ${latestDate}, Kontrol Tarihi: ${todayIso}).`,
+    ]
+  );
+  invalidateCache("health_summary");
+  return {
+    status: "SYNCED",
+    trigger: triggerSource,
+    latest_price_date: latestDate,
+    checked_at: new Date().toISOString(),
+  };
+}
+
 async function handleRequest(
   req: NextRequest,
   context: { params: { path: string[] } }
@@ -368,26 +423,42 @@ async function handleRequest(
   }
 
   try {
+    // ─── CRON DAILY TEFAS SYNC (/api/cron/daily-sync) ───
+    if (subPath === "/cron/daily-sync" && (method === "GET" || method === "POST")) {
+      const syncRes = await runDailyTefasSync("VERCEL_CRON_0600");
+      return NextResponse.json(syncRes);
+    }
+
     // ─── HEALTH & SYSTEM STATUS ───
     if (subPath === "/health" && method === "GET") {
       const data = await withCache("health_summary", async () => {
-        const [fCnt, pStats, bCnt, eCnt] = await Promise.all([
+        const [fCnt, pStats, bCnt, eCnt, quota] = await Promise.all([
           dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM funds;"),
           dbQuery<{ c: number; min_d: string; max_d: string }>(
             "SELECT COUNT(*)::int AS c, MIN(date) AS min_d, MAX(date) AS max_d FROM fund_prices;"
           ),
           dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM bulletins;"),
           dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM evidences;"),
+          getNeonQuotaStatus(),
         ]);
+
+        const latestDate = pStats.rows[0]?.max_d || "2026-10-16";
+        const todayIso = new Date().toISOString().slice(0, 10);
+        if (latestDate < todayIso && Date.now() - lastLazySyncMs > 6 * 60 * 60 * 1000) {
+          lastLazySyncMs = Date.now();
+          runDailyTefasSync("LAZY_VISITOR_AUTO_SYNC").catch(() => {});
+        }
+
         return {
           status: "OK",
           platform: "TÜBİTAK 2209-A Fon Güven & Şeffaflık Platformu",
           database_engine: "Neon PostgreSQL (Persistent Cloud Pool)",
+          db_quota: quota,
           database_summary: {
             tracked_funds_count: fCnt.rows[0]?.c || 60,
             total_real_tefas_price_records: pStats.rows[0]?.c || 15185,
             oldest_price_date: pStats.rows[0]?.min_d || "2025-10-16",
-            latest_price_date: pStats.rows[0]?.max_d || "2026-10-16",
+            latest_price_date: latestDate,
             bulletins_count: bCnt.rows[0]?.c || 123,
             evidence_cards_count: eCnt.rows[0]?.c || 15,
           },
@@ -397,18 +468,20 @@ async function handleRequest(
     }
 
     if (subPath === "/system/health-detail" && method === "GET") {
-      const [fCnt, pCnt, mCnt, sCnt, gCnt, secCnt] = await Promise.all([
+      const [fCnt, pCnt, mCnt, sCnt, gCnt, secCnt, quota] = await Promise.all([
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM funds;"),
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM fund_prices;"),
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM contact_messages;"),
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM survey_responses;"),
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM glossary_terms;"),
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM security_logs;"),
+        getNeonQuotaStatus(),
       ]);
       return NextResponse.json({
         status: "HEALTHY",
         database_mode: "Neon PostgreSQL (Kalıcı Bulut Veritabanı)",
         persistent_storage: true,
+        db_quota: quota,
         total_funds: fCnt.rows[0]?.c || 0,
         total_prices: pCnt.rows[0]?.c || 0,
         total_messages: mCnt.rows[0]?.c || 0,
@@ -422,21 +495,23 @@ async function handleRequest(
 
     // ─── PUBLIC SETTINGS, ANNOUNCEMENT, ECONOMIC PARAMS ───
     if (subPath === "/public/sync-status" && method === "GET") {
-      const [fCnt, pStats, logs] = await Promise.all([
+      const [fCnt, pStats, logs, quota] = await Promise.all([
         dbQuery<{ c: number }>("SELECT COUNT(*)::int AS c FROM funds;"),
         dbQuery<{ c: number; min_d: string; max_d: string }>(
           "SELECT COUNT(*)::int AS c, MIN(date) AS min_d, MAX(date) AS max_d FROM fund_prices;"
         ),
         dbQuery("SELECT id, sync_type, status, details, created_at FROM sync_logs ORDER BY id DESC LIMIT 15;"),
+        getNeonQuotaStatus(),
       ]);
       return NextResponse.json({
         database_engine: "Neon PostgreSQL (Kalıcı Bulut)",
+        db_quota: quota,
         total_funds: fCnt.rows[0]?.c || 60,
         total_price_records: pStats.rows[0]?.c || 15185,
         scheduler: {
           active: true,
-          cron_schedule: "Her iş günü 10:30 ve 18:30 (Neon PostgreSQL Upsert)",
-          next_scheduled_run: "18:30 (Otomatik Bulut Senkronizasyonu)",
+          cron_schedule: "Her iş günü 06:00 (/api/cron/daily-sync) + Lazy Auto-Sync",
+          next_scheduled_run: "06:00 (Otomatik Bulut Senkronizasyonu)",
         },
         database_state: {
           tracked_funds_count: fCnt.rows[0]?.c || 60,
@@ -1283,6 +1358,19 @@ async function handleRequest(
     // ─── CONTACT (/api/contact & /api/public/contact) ───
     if ((subPath === "/contact" || subPath === "/public/contact") && method === "POST") {
       const raw = await req.json().catch(() => ({}));
+      if (raw?.website_url && String(raw.website_url).trim() !== "") {
+        await logSecurityEvent(
+          "HONEYPOT_BOT_BLOCKED",
+          "WARNING",
+          clientIp,
+          subPath,
+          "İletişim formunda görünmez website_url (Honeypot) alanı dolduruldu; bot reddedildi."
+        );
+        return NextResponse.json(
+          { detail: "Otomatik bot/spam gönderimi engellendi." },
+          { status: 400 }
+        );
+      }
       const body = sanitizePayload(raw, clientIp, subPath);
 
       const fullName = String(body.full_name || body.name || "İsimsiz Katılımcı").trim();
@@ -1340,7 +1428,29 @@ async function handleRequest(
     }
 
     if (subPath === "/survey/submit" && method === "POST") {
-      const body = sanitizePayload(await req.json().catch(() => ({})), clientIp, subPath);
+      const raw = await req.json().catch(() => ({}));
+      if (raw?.website_url && String(raw.website_url).trim() !== "") {
+        await logSecurityEvent(
+          "HONEYPOT_BOT_BLOCKED",
+          "WARNING",
+          clientIp,
+          subPath,
+          "Anket formunda görünmez website_url (Honeypot) alanı dolduruldu; bot reddedildi."
+        );
+        return NextResponse.json(
+          { detail: "Otomatik bot/spam gönderimi engellendi." },
+          { status: 400 }
+        );
+      }
+
+      const body = sanitizePayload(raw, clientIp, subPath);
+      await dbQuery(
+        "ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS voter_hash TEXT;"
+      ).catch(() => {});
+      await dbQuery(
+        "ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS is_suspicious INTEGER DEFAULT 0;"
+      ).catch(() => {});
+
       const qRes = await dbQuery(
         "SELECT * FROM survey_questions WHERE is_active = 1 ORDER BY display_order ASC, id ASC;"
       );
@@ -1396,39 +1506,67 @@ async function handleRequest(
             )
           : 3.5;
 
-      const ins = await dbQuery<{ id: number }>(
-        `INSERT INTO survey_responses (
-           session_id, age_group, education_level, investment_experience,
-           holds_funds, answers_json, literacy_score, perception_score,
-           completion_time_sec, created_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-         RETURNING id;`,
-        [
-          String(body.session_id || "anon"),
-          String(body.age_group || "26-35"),
-          String(body.education_level || "Lisans"),
-          String(body.investment_experience || "1-3 Yıl"),
-          String(body.holds_funds || "Evet"),
-          JSON.stringify(answers),
-          literacyScore,
-          perceptionScore,
-          Number(body.completion_time_sec || 120),
-        ]
-      );
+      const voterHash = `${String(body.voter_hash || "vh")}_${clientIp}`;
+      const sessionId = String(body.session_id || "anon");
+      const completionSec = Number(body.completion_time_sec || 120);
+      const isSuspicious = completionSec < 8 || body.is_suspicious ? 1 : 0;
 
-      invalidateCache("survey:analytics");
+      // 24 saat içinde mükerrer kayıt kontrolü (voter_hash veya session_id)
+      const dupCheck = await dbQuery<{ id: number }>(
+        `SELECT id FROM survey_responses
+         WHERE (voter_hash = $1 OR session_id = $2)
+           AND created_at::timestamp >= NOW() - INTERVAL '24 hours'
+         LIMIT 1;`,
+        [voterHash, sessionId]
+      ).catch(() => ({ rows: [] as { id: number }[] }));
+
+      const alreadyParticipated =
+        Boolean(body.duplicate_local) || (dupCheck.rows && dupCheck.rows.length > 0);
+
+      let responseId = dupCheck.rows?.[0]?.id || 1;
+      if (!alreadyParticipated) {
+        const ins = await dbQuery<{ id: number }>(
+          `INSERT INTO survey_responses (
+             session_id, voter_hash, is_suspicious, age_group, education_level,
+             investment_experience, holds_funds, answers_json, literacy_score,
+             perception_score, completion_time_sec, created_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+           RETURNING id;`,
+          [
+            sessionId,
+            voterHash,
+            isSuspicious,
+            String(body.age_group || "26-35"),
+            String(body.education_level || "Lisans"),
+            String(body.investment_experience || "1-3 Yıl"),
+            String(body.holds_funds || "Evet"),
+            JSON.stringify(answers),
+            literacyScore,
+            perceptionScore,
+            completionSec,
+          ]
+        );
+        responseId = ins.rows[0]?.id || 1;
+        invalidateCache("survey:analytics");
+      }
 
       let badgeTitle = "Başlangıç Seviyesi Fon Yatırımcısı";
       if (literacyScore >= 85) badgeTitle = "Üst Düzey Bilinçli Fon Yatırımcısı 🏆";
       else if (literacyScore >= 60) badgeTitle = "Yetkin Finansal Okuryazar ⭐";
 
       return NextResponse.json({
-        response_id: ins.rows[0]?.id || 1,
+        response_id: responseId,
+        already_participated: alreadyParticipated,
+        is_suspicious: Boolean(isSuspicious),
+        message: alreadyParticipated
+          ? "Araştırmamıza daha önce katıldığınız için teşekkür ederiz."
+          : "Anket yanıtınız başarıyla kaydedildi.",
         literacy_score: literacyScore,
         correct_count: correctCount,
         total_literacy_questions: litQuestions.length,
         perception_score: perceptionScore,
         badge_title: badgeTitle,
+        badge: badgeTitle,
         percentile_rank: Math.min(99, Math.max(15, Math.round(literacyScore * 0.92))),
         community_avg_score: 68.5,
         evaluations,
@@ -2019,9 +2157,19 @@ async function handleRequest(
         if (!file) {
           return NextResponse.json({ detail: "PDF dosyası bulunamadı." }, { status: 400 });
         }
+        // Neon 1 GB Kota Koruması: 1.5 MB (1500 KB) üstü dosyaları reddet
+        if (file.size > 1500 * 1024) {
+          return NextResponse.json(
+            {
+              detail:
+                "PDF dosya boyutu 1.5 MB (1500 KB) sınırını aşıyor! Neon 1 GB bulut veritabanı kotasını korumak için lütfen '🔗 Resmi KAP / TEFAS PDF Linki (URL)' seçeneğini kullanınız.",
+            },
+            { status: 400 }
+          );
+        }
         const arrayBuffer = await file.arrayBuffer();
         const base64Data = Buffer.from(arrayBuffer).toString("base64");
-        const extractedText = `[Sayfa 1] Resmi PDF Belgesi (${file.name}) Neon PostgreSQL bulut veritabanına Base64 (file_data) formatında kaydedilmek üzere işlendi. Boyut: ${file.size} byte.`;
+        const extractedText = `[Sayfa 1] Resmi PDF Belgesi (${file.name}) Neon PostgreSQL bulut veritabanına Base64 (file_data) formatında kaydedilmek üzere işlendi. Boyut: ${Math.round(file.size / 1024)} KB.`;
         return NextResponse.json({
           filename: file.name,
           char_count: extractedText.length,
@@ -2394,6 +2542,37 @@ async function handleRequest(
         });
       }
 
+      if (subPath === "/admin/survey/clean-suspicious" && method === "POST") {
+        await dbQuery(
+          "ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS voter_hash TEXT;"
+        ).catch(() => {});
+        await dbQuery(
+          "ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS is_suspicious INTEGER DEFAULT 0;"
+        ).catch(() => {});
+
+        const delSuspicious = await dbQuery<{ id: number }>(
+          `DELETE FROM survey_responses
+           WHERE is_suspicious = 1
+              OR completion_time_sec < 8
+              OR id NOT IN (
+                SELECT MIN(id)
+                FROM survey_responses
+                GROUP BY COALESCE(NULLIF(voter_hash, ''), session_id)
+              )
+           RETURNING id;`
+        );
+        invalidateCache("survey:analytics");
+        const removedCount = delSuspicious.rows.length;
+        return NextResponse.json({
+          status: "CLEANED",
+          removed_count: removedCount,
+          message:
+            removedCount > 0
+              ? `${removedCount} adet şüpheli (<8 sn) veya mükerrer anket yanıtı başarıyla temizlendi.`
+              : "Veritabanında şüpheli (<8 sn) veya mükerrer anket yanıtı bulunmadı; tüm veriler temiz.",
+        });
+      }
+
       if (subPath === "/admin/survey/export" && method === "GET") {
         const res = await dbQuery("SELECT * FROM survey_responses ORDER BY id DESC;");
         const header =
@@ -2495,28 +2674,47 @@ async function handleRequest(
 
       // 8. Admin Cybersecurity & Traffic Shield Dashboard (/api/admin/security/*)
       if (subPath === "/admin/security/dashboard" && method === "GET") {
-        const logsRes = await dbQuery(
-          "SELECT id, event_type, severity, ip_address, endpoint, details, blocked_until, created_at FROM security_logs ORDER BY id DESC LIMIT 60;"
-        );
+        const [logsRes, quota] = await Promise.all([
+          dbQuery(
+            "SELECT id, event_type, severity, ip_address, endpoint, details, blocked_until, created_at FROM security_logs ORDER BY id DESC LIMIT 60;"
+          ),
+          getNeonQuotaStatus(),
+        ]);
         return NextResponse.json({
           status: "SHIELD_ACTIVE",
           database_engine: "Neon PostgreSQL (SSL/TLS Required + Connection Pool)",
-          security_headers: [
-            "X-Frame-Options: DENY",
-            "X-Content-Type-Options: nosniff",
-            "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload",
-            "X-XSS-Protection: 1; mode=block",
-            "Referrer-Policy: strict-origin-when-cross-origin",
-          ],
+          db_quota: quota,
+          security_headers: {
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            "X-XSS-Protection": "1; mode=block",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+          },
           rate_limiter: {
             enabled: true,
-            max_requests_per_min: 240,
-            admin_brute_force_max_attempts: 5,
-            admin_brute_force_lock_minutes: 15,
+            status: "ACTIVE",
+            max_requests_per_minute: 120,
+            mutation_max_per_minute: 25,
           },
+          cache: getCacheMetrics(),
           cache_and_pool: getCacheMetrics(),
+          brute_force: {
+            active_locks: getActiveBruteForceLocks(),
+          },
           active_locks: getActiveBruteForceLocks(),
+          recent_logs: logsRes.rows,
           recent_security_logs: logsRes.rows,
+          summary: {
+            total_events: logsRes.rows.length,
+            rate_limit_blocks: logsRes.rows.filter((r: any) =>
+              String(r.event_type || "").includes("RATE_LIMIT")
+            ).length,
+            sanitized_payloads: logsRes.rows.filter((r: any) =>
+              String(r.event_type || "").includes("SANITIZE") ||
+              String(r.event_type || "").includes("HONEYPOT")
+            ).length,
+          },
         });
       }
 

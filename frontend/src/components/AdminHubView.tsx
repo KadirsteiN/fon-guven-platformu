@@ -188,6 +188,8 @@ export default function AdminHubView({
   const [loadingSurvey, setLoadingSurvey] = useState<boolean>(false);
   const [downloadingSurvey, setDownloadingSurvey] = useState<string | null>(null);
   const [copiedFinding, setCopiedFinding] = useState<number | null>(null);
+  const [cleaningSurvey, setCleaningSurvey] = useState<boolean>(false);
+  const [surveyCleanMsg, setSurveyCleanMsg] = useState<string | null>(null);
 
   // CANLI DUYURU BANDI & DİNAMİK EKONOMİK PARAMETRELER state
   const [announcementData, setAnnouncementData] = useState<any>({
@@ -541,6 +543,13 @@ export default function AdminHubView({
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 1500 * 1024) {
+      setBulletinMsg(
+        `⚠️ PDF boyutu (${(file.size / (1024 * 1024)).toFixed(2)} MB) 1.5 MB (1500 KB) sınırını aşıyor! Neon 1 GB veritabanı kotasını korumak için lütfen yukarıdaki "🔗 Resmi KAP / TEFAS PDF Linki (Önerilen)" alanını kullanınız.`
+      );
+      e.target.value = "";
+      return;
+    }
     setExtractingPdf(true);
     setBulletinMsg(null);
     try {
@@ -1008,6 +1017,24 @@ export default function AdminHubView({
     }
   };
 
+  const handleCleanSuspiciousSurvey = async () => {
+    setCleaningSurvey(true);
+    setSurveyCleanMsg(null);
+    try {
+      const res = await adminFetch<any>("/api/admin/survey/clean-suspicious", {
+        method: "POST",
+      });
+      setSurveyCleanMsg(
+        res.message || "Şüpheli (<8 sn) ve mükerrer anket yanıtları temizlendi."
+      );
+      await handleRefreshSurvey();
+    } catch (e: any) {
+      setSurveyCleanMsg(`Temizleme hatası: ${e.message}`);
+    } finally {
+      setCleaningSurvey(false);
+    }
+  };
+
   // --- SİBER GÜVENLİK & TRAFİK KALKANI İŞLEMLERİ ---
   const handleRefreshSecurity = async () => {
     setLoadingSecurity(true);
@@ -1155,6 +1182,43 @@ export default function AdminHubView({
             );
           })}
         </div>
+
+        {/* 💾 Bulut Veritabanı Kota Durumu (Neon PostgreSQL 1 GB Kota Koruması) */}
+        {(() => {
+          const quota =
+            syncData?.db_quota ||
+            systemHealth?.db_quota ||
+            securityDashboard?.db_quota || {
+              used_mb: 24.0,
+              max_mb: 1024,
+              used_pct: 2.34,
+              free_pct: 97.66,
+            };
+          return (
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-emerald-600" />
+                  💾 Bulut Veritabanı Kota Durumu (Neon PostgreSQL)
+                </span>
+                <div className="flex items-center gap-3 font-mono text-xs">
+                  <span className="font-bold text-blue-600 dark:text-blue-400">
+                    {quota.used_mb} MB / {quota.max_mb} MB Kullanıldı
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[11px]">
+                    %{quota.free_pct} Boş
+                  </span>
+                </div>
+              </div>
+              <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-blue-600 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(2, Math.min(100, quota.used_pct || 2.5))}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* SEKME 1: GENEL DURUM & APSCHEDULER SENKRONİZASYON */}
@@ -2218,31 +2282,31 @@ export default function AdminHubView({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold mb-1">
-                  Orijinal Belge Bağlantısı (URL):
+                <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">
+                  🔗 Resmi KAP / TEFAS PDF Linki (Önerilen - Veritabanında Yer Kaplamaz):
                 </label>
                 <input
                   type="url"
+                  placeholder="https://www.kap.org.tr/tr/YatirimFonlari"
                   value={bOriginalUrl}
                   onChange={(e) => setBOriginalUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                  className="w-full px-3 py-2 rounded-xl border-2 border-emerald-400 dark:border-emerald-700 bg-emerald-50/40 dark:bg-slate-800 text-xs font-medium"
                 />
               </div>
             </div>
 
-            {/* PDF Yükleme veya Doğrudan Metin Girişi */}
+            {/* 1. Seçenek: Önerilen Harici Link Bilgisi + 2. Seçenek: Maks 1.5 MB PDF Yükleme */}
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-bold">
-                  Belge İçeriği (PDF&apos;ten Otomatik Ayrıştır veya Doğrudan
-                  Metin Gir):
+                  Belge İçeriği (Önerilen: Yukarıya Resmi KAP/TEFAS Linki Girin veya Maks. 1.5 MB PDF Yükleyin):
                 </label>
                 <label className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700">
                   <Upload className="w-3.5 h-3.5 text-blue-600" />
                   <span>
                     {extractingPdf
                       ? "PDF Ayrıştırılıyor..."
-                      : "PDF Belge Yükle (.pdf)"}
+                      : "Bilgisayardan PDF Yükle (Maks. 1.5 MB)"}
                   </span>
                   <input
                     type="file"
@@ -3212,6 +3276,17 @@ export default function AdminHubView({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                onClick={handleCleanSuspiciousSurvey}
+                disabled={cleaningSurvey}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {cleaningSurvey
+                  ? "Temizleniyor..."
+                  : "🧹 Şüpheli / Mükerrer Yanıtları Temizle"}
+              </button>
+              <button
+                type="button"
                 onClick={handleRefreshSurvey}
                 disabled={loadingSurvey}
                 className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
@@ -3239,6 +3314,12 @@ export default function AdminHubView({
               </button>
             </div>
           </div>
+
+          {surveyCleanMsg && (
+            <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs font-bold text-indigo-800 dark:text-indigo-200">
+              {surveyCleanMsg}
+            </div>
+          )}
 
           {/* KPI Kartları */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

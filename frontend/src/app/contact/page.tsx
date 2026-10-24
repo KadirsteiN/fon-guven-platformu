@@ -41,6 +41,7 @@ export default function ContactPage() {
   const [subject, setSubject] = useState("Akademik İş Birliği");
   const [message, setMessage] = useState("");
   const [kvkkApproved, setKvkkApproved] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState(""); // Honeypot anti-bot field
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -54,6 +55,11 @@ export default function ContactPage() {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessData(null);
+
+    if (websiteUrl.trim() !== "") {
+      setErrorMsg("Otomatik bot/spam gönderimi engellendi.");
+      return;
+    }
 
     const digitsOnly = phone.replace(/\D/g, "");
     if (digitsOnly.length !== 11 || !digitsOnly.startsWith("05")) {
@@ -78,6 +84,7 @@ export default function ContactPage() {
       subject,
       message: message.trim(),
       kvkk_approved: kvkkApproved,
+      website_url: websiteUrl,
     };
 
     try {
@@ -263,6 +270,20 @@ export default function ContactPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Görünmez Honeypot Bot Koruması */}
+              <div className="hidden" aria-hidden="true">
+                <label>
+                  Website URL
+                  <input
+                    type="text"
+                    name="website_url"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                  />
+                </label>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">

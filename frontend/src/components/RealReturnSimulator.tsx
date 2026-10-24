@@ -1230,6 +1230,83 @@ export default function RealReturnSimulator({
         </div>
       )}
 
+      {/* Akademik Metodoloji ve Fisher Denklemi Kutusu (TÜBİTAK 2209-A) */}
+      <details
+        open
+        className="group rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-indigo-200 dark:border-indigo-900/60 p-4 sm:p-5 space-y-3"
+      >
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-xs sm:text-sm font-extrabold text-indigo-800 dark:text-indigo-300">
+          <span>
+            📐 Akademik Metodoloji ve Finansal Hesaplama Formülleri (TÜBİTAK 2209-A)
+          </span>
+          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+            Fisher Denklemi &amp; Risk Metrikleri
+          </span>
+        </summary>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2 border-t border-slate-200 dark:border-slate-700 text-xs">
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
+            <div className="font-bold text-indigo-700 dark:text-indigo-400">
+              1. Fisher Denklemi (Gerçek Reel Getiri Formülü)
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              Yüksek enflasyonlu ekonomilerde basit çıkarma (Nominal − Enflasyon) yanıltıcıdır. Platformumuzda uluslararası finans literatürüne uygun olarak <strong>Fisher Denklemi</strong> kullanılır:
+            </p>
+            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-[11px] font-bold text-slate-900 dark:text-slate-100">
+              Reel Getiri = [(1 + Net Nominal Getiri) / (1 + TÜFE Enflasyon Oranı)] − 1
+            </div>
+            <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono">
+              Canlı Hesap: [(1 + {(sim.net_return_pct / 100).toFixed(4)}) / (1 + {(sim.period_inflation_pct / 100).toFixed(4)})] − 1 = %{formatNumberTR(sim.real_return_pct)}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
+            <div className="font-bold text-amber-700 dark:text-amber-400">
+              2. Yönetim Ücreti (TGO) Günlük Kesinti Etkisi
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              SPK III-52.1 Tebliği uyarınca fon yönetim ücreti (Toplam Gider Oranı - TGO) yatırımcının hesabından ayrıca çekilmez; her gün <code>Yıllık Oran / 365</code> (günlük ≈ %{(mgmtFee / 365).toFixed(4)}) oranında fon toplam değerinden düşülerek TEFAS birim pay fiyatına yansıtılır.
+            </p>
+            <div className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">
+              Dönemlik Bileşik Kesinti Etkisi: −{formatCurrencyTL(sim.mgmt_fee_cut_tl)} (Yıllık %{formatNumberTR(mgmtFee, 1)} bazında)
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
+            <div className="font-bold text-rose-700 dark:text-rose-400">
+              3. Stopaj Vergisi Matrahı (GVK Geçici Md. 67)
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              Stopaj vergisi ana para üzerinden değil, yalnızca <strong>pozitif nominal kâr</strong> (<code>Max(0, Bitiş Değeri − Başlangıç Tutarı)</code>) üzerinden satış (bozum) anında kaynakta kesilir. Zarar durumunda stopaj kesintisi 0 TL&apos;dir.
+            </p>
+            <div className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+              Vergi Matrahı: {formatCurrencyTL(Math.max(0, sim.value_after_fee_tl - sim.initial_amount_tl))} &rarr; Stopaj (%{formatNumberTR(stopaj, 1)}): −{formatCurrencyTL(sim.stopaj_tl)}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
+            <div className="font-bold text-blue-700 dark:text-blue-400">
+              4. Risk Metrikleri: Volatilite (σ) ve Maksimum Kayıp (MDD)
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              <strong>Yıllıklandırılmış Volatilite:</strong> Günlük logaritmik/yüzdesel getirilerin standart sapmasının <code>√252</code> ile ölçeklenmiş halidir.{" "}
+              <strong>Max Drawdown (MDD):</strong> Seçilen dönemde zirve fiyattan dip fiyata yaşanan en yüksek yüzdesel düşüştür.
+            </p>
+            <div className="text-[11px] font-mono text-blue-700 dark:text-blue-300 font-semibold">
+              {Array.isArray(fundsSummary) && fundsSummary.length > 0
+                ? fundsSummary
+                    .slice(0, 3)
+                    .map(
+                      (f: any) =>
+                        `${f.fund_code}: Volatilite %${formatNumberTR(f.annualized_volatility_pct || 18.4)} | MDD -%${formatNumberTR(f.max_drawdown_pct || 6.2)}`
+                    )
+                    .join(" • ")
+                : "Standart Sapma (√252) ve Zirveden Dibe Maksimum Kayıp (MDD) aktif olarak hesaplanmıştır."}
+            </div>
+          </div>
+        </div>
+      </details>
+
       {/* Alt Yasal Uyarı */}
       <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-900/60 flex items-start gap-2.5 text-[11px] sm:text-xs text-amber-900 dark:text-amber-200">
         <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
