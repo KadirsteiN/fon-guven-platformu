@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   FileSearch,
   AlertTriangle,
-  Database,
   ArrowRight,
   FileText,
   Briefcase,
@@ -22,10 +21,6 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCat, setSelectedCat] = useState("ALL");
-  const [newFundCode, setNewFundCode] = useState("");
-  const [newFundType, setNewFundType] = useState("Yatırım Fonu");
-  const [addingFund, setAddingFund] = useState(false);
-  const [addFundMsg, setAddFundMsg] = useState<string | null>(null);
 
   async function loadDashboard() {
     setLoading(true);
@@ -59,33 +54,6 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard();
   }, []);
-
-  const handleAddNewFund = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = newFundCode.trim().toUpperCase();
-    if (!code) return;
-    setAddingFund(true);
-    setAddFundMsg(null);
-    try {
-      const res = await apiFetch<any>("/api/funds/fetch", {
-        method: "POST",
-        body: JSON.stringify({
-          fund_code: code,
-          fund_type: newFundType,
-          total_days: 365,
-        }),
-      });
-      setAddFundMsg(
-        `[${res.fund_code}] ${res.fund_title || ""} başarıyla TEFAS'tan çekildi (${res.total_db_days} işlem günü).`
-      );
-      setNewFundCode("");
-      await loadDashboard();
-    } catch (err: any) {
-      setAddFundMsg(`Hata: ${err.message}`);
-    } finally {
-      setAddingFund(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -152,33 +120,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* 🎓 TÜBİTAK 2209-A FİNANSAL OKURYAZARLIK & FON ALGI ANKETİ HERO KARTI */}
-      <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 border border-indigo-500/30">
-        <div className="space-y-2 relative z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold text-amber-300">
-            <GraduationCap className="w-4 h-4" />
-            TÜBİTAK 2209-A Akademik Araştırma Ölçeği
-          </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-            🎓 Finansal Okuryazarlık &amp; Fon Algı Araştırmasına Katılın
-          </h2>
-          <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl leading-relaxed">
-            14 soruluk bilimsel testimizi çözün; Takasbank güvencesi, yönetim ücretleri ve stopaj konularındaki bilginizi ölçerek anında <strong>Finansal Okuryazarlık Karnenizi</strong> alın!
-          </p>
-        </div>
-
-        <div className="shrink-0 relative z-10 flex flex-wrap gap-2.5">
-          <Link
-            href="/survey"
-            className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm shadow-lg inline-flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
-          >
-            <span>Testi Çöz &amp; Seviyeni Öğren</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
-
-      {/* Üst Karşılama ve Sistem Doğrulama Kartı */}
+      {/* 1. EN ÜSTTE: Üst Karşılama ve Sistem Doğrulama Kartı (Hero) */}
       <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-700 via-blue-800 to-slate-900 text-white shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
@@ -219,6 +161,32 @@ export default function DashboardPage() {
               Sanal Sepet Laboratuvarı
             </Link>
           </div>
+        </div>
+      </div>
+
+      {/* 2. HEMEN ALTINDA: 🎓 TÜBİTAK 2209-A FİNANSAL OKURYAZARLIK & FON ALGI ANKETİ KARTI */}
+      <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 border border-indigo-500/30">
+        <div className="space-y-2 relative z-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold text-amber-300">
+            <GraduationCap className="w-4 h-4" />
+            TÜBİTAK 2209-A Akademik Araştırma Ölçeği
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            🎓 Finansal Okuryazarlık &amp; Fon Algı Araştırmasına Katılın
+          </h2>
+          <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl leading-relaxed">
+            14 soruluk bilimsel testimizi çözün; Takasbank güvencesi, yönetim ücretleri ve stopaj konularındaki bilginizi ölçerek anında <strong>Finansal Okuryazarlık Karnenizi</strong> alın!
+          </p>
+        </div>
+
+        <div className="shrink-0 relative z-10 flex flex-wrap gap-2.5">
+          <Link
+            href="/survey"
+            className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm shadow-lg inline-flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
+          >
+            <span>Testi Çöz &amp; Seviyeni Öğren</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </div>
 
@@ -338,71 +306,6 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
-
-      {/* Canlı TEFAS Fon Ekleme Çubuğu */}
-      <form
-        onSubmit={handleAddNewFund}
-        className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3"
-      >
-        <div className="flex items-start gap-2.5">
-          <Database className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-          <div>
-            <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
-              Canlı TEFAS Veri Havuzuna Yeni Fon Ekle (2.000+ TEFAS Fonu
-              Desteklenir)
-            </div>
-            <div className="text-[11px] text-slate-500">
-              İstediğiniz herhangi bir 3 harfli TEFAS fon kodunu girerek son 1
-              yıllık gerçek verisini veritabanına çekebilirsiniz:
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="text"
-            maxLength={5}
-            placeholder="Fon Kodu (Örn: TTE)"
-            value={newFundCode}
-            onChange={(e) => setNewFundCode(e.target.value.toUpperCase())}
-            className="w-36 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold uppercase"
-          />
-          <select
-            value={newFundType}
-            onChange={(e) => setNewFundType(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
-          >
-            <option value="Hisse Senedi Yoğun Fon">Hisse Senedi Yoğun Fon</option>
-            <option value="Yabancı Hisse / Teknoloji Fonu">
-              Yabancı Hisse / Teknoloji Fonu
-            </option>
-            <option value="Kıymetli Madenler / Altın Fonu">
-              Kıymetli Madenler / Altın Fonu
-            </option>
-            <option value="Para Piyasası (TL) Fonu">
-              Para Piyasası (TL) Fonu
-            </option>
-            <option value="Değişken / Çoklu Varlık Fonu">
-              Değişken / Çoklu Varlık Fonu
-            </option>
-            <option value="Katılım Fonu">Katılım Fonu</option>
-            <option value="Eurobond / Borçlanma Araçları Fonu">
-              Eurobond / Borçlanma Araçları Fonu
-            </option>
-          </select>
-          <button
-            type="submit"
-            disabled={addingFund}
-            className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-          >
-            {addingFund ? "TEFAS'tan Çekiliyor..." : "+ TEFAS'tan Çek & Ekle"}
-          </button>
-        </div>
-      </form>
-      {addFundMsg && (
-        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-900 dark:text-blue-200 font-medium">
-          {addFundMsg}
-        </div>
-      )}
 
       {/* Güncel TEFAS Fonları 2026 Performans ve Risk Özeti Tablosu */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">

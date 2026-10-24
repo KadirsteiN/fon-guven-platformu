@@ -420,6 +420,8 @@ export default function BasketsPage() {
             startDate={simResult.actual_start_date || startDate}
             endDate={simResult.actual_end_date || endDate}
             defaultAmount={simResult.total_initial_amount_tl || 100000}
+            periodReturnPct={simResult.weighted_return_pct}
+            dailySeries={simResult.daily_series}
           />
         </>
       )}

@@ -539,6 +539,8 @@ export default function AnalyticsPage() {
             startDate={data.actual_start_date || startDate}
             endDate={data.actual_end_date || endDate}
             defaultAmount={100000}
+            fundsSummary={data.funds_summary}
+            dailySeries={data.daily_series}
           />
         </>
       )}
