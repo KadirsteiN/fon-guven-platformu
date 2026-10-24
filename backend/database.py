@@ -1,19 +1,115 @@
 """
-Veritabanı Kurulumu ve Veri Erişim Katmanı (SQLite)
+Veritabanı Kurulumu ve Veri Erişim Katmanı (Neon PostgreSQL + SQLite Hibrit Senkronizasyon & Connection Pool)
 Dosya: backend/database.py
-Veritabanı: backend/fon_platformu.db
+Kalıcı Bulut Veritabanı: Neon PostgreSQL (ep-steep-salad-b92j8mft-pooler.c-7.eu-central-1.aws.neon.tech/neondb)
 """
 
 import json
+import os
 import sqlite3
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+try:
+    import psycopg2
+    from psycopg2 import pool as pg_pool
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+    pg_pool = None
+    RealDictCursor = None
+
+DEFAULT_NEON_DATABASE_URL = (
+    "postgresql://neondb_owner:npg_TdDnFhc8mWy9@"
+    "ep-steep-salad-b92j8mft-pooler.c-7.eu-central-1.aws.neon.tech/neondb?sslmode=require"
+)
+
+DATABASE_URL = (
+    os.getenv("DATABASE_URL") or DEFAULT_NEON_DATABASE_URL
+).replace("&channel_binding=require", "").replace("?channel_binding=require&", "?")
+
 DB_PATH = Path(__file__).resolve().parent / "fon_platformu.db"
+
+# ─── POSTGRESQL CONNECTION POOL & 5 DAKİKALIK IN-MEMORY CACHE ───
+_PG_CONNECTION_POOL: Any = None
+_IN_MEMORY_CACHE: Dict[str, Dict[str, Any]] = {}
+CACHE_TTL_SECONDS = 300  # 5 dakika
+
+
+def get_pg_pool():
+    """Neon PostgreSQL için ThreadedConnectionPool (Connection Pooling) döndürür."""
+    global _PG_CONNECTION_POOL
+    if psycopg2 is None or pg_pool is None:
+        return None
+    if _PG_CONNECTION_POOL is None:
+        try:
+            _PG_CONNECTION_POOL = pg_pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=15,
+                dsn=DATABASE_URL,
+            )
+        except Exception as exc:
+            print(f"[NEON POOL UYARISI] {exc}")
+            _PG_CONNECTION_POOL = None
+    return _PG_CONNECTION_POOL
+
+
+def pg_query(sql: str, params: tuple = (), fetch: bool = True) -> List[Dict[str, Any]]:
+    """Neon PostgreSQL havuzundan bağlantı alarak güvenli sorgu çalıştırır (UPSERT / SELECT)."""
+    pool_inst = get_pg_pool()
+    if pool_inst is None:
+        return []
+    conn = None
+    try:
+        conn = pool_inst.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, params)
+            rows = [dict(r) for r in cur.fetchall()] if fetch and cur.description else []
+        conn.commit()
+        return rows
+    except Exception as exc:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        print(f"[NEON PG SORGU UYARISI] {exc}")
+        return []
+    finally:
+        if conn and pool_inst:
+            pool_inst.putconn(conn)
+
+
+def get_cached(key: str) -> Optional[Any]:
+    """5 dakikalık bellek içi önbellekten (In-Memory Cache) veri okur."""
+    entry = _IN_MEMORY_CACHE.get(key)
+    if entry and entry["expires_at"] > time.time():
+        return entry["value"]
+    return None
+
+
+def set_cached(key: str, value: Any, ttl_sec: int = CACHE_TTL_SECONDS) -> None:
+    """Veriyi 5 dakikalık bellek içi önbelleğe yazar."""
+    _IN_MEMORY_CACHE[key] = {
+        "value": value,
+        "expires_at": time.time() + ttl_sec,
+    }
+
+
+def invalidate_cache(prefix: Optional[str] = None) -> None:
+    """Önbelleği temizler."""
+    if not prefix:
+        _IN_MEMORY_CACHE.clear()
+        return
+    for k in list(_IN_MEMORY_CACHE.keys()):
+        if k.startswith(prefix):
+            _IN_MEMORY_CACHE.pop(k, None)
 
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    """SQLite veritabanı bağlantısı oluşturur ve Row factory ayarlar."""
+    """Yerel önbellek/motor SQLite bağlantısı oluşturur ve Row factory ayarlar."""
     target_path = db_path or DB_PATH
     conn = sqlite3.connect(str(target_path))
     conn.row_factory = sqlite3.Row
@@ -29,13 +125,13 @@ def _table_columns(conn: sqlite3.Connection, table_name: str) -> List[str]:
 
 def init_db(db_path: Optional[Path] = None) -> None:
     """
-    Proje şemasındaki tüm tabloları:
-    - funds, fund_prices (Modül C & TEFAS)
-    - bulletins (Modül B)
-    - evidence_cards (Modül A & G)
-    - virtual_baskets, basket_items (Modül D)
-    - finance_transactions, savings_goals, debts, budget_limits (Modül E)
-    oluşturur.
+    Proje şemasındaki tüm tabloları (ASLA DROP veya DELETE yapmadan, IF NOT EXISTS ile) oluşturur:
+    - funds, fund_prices, tracked_funds
+    - bulletins (file_data Base64 sütunu ile)
+    - site_settings, system_settings
+    - evidences, evidence_cards, transparency_scores
+    - contact_messages, survey_questions, survey_responses
+    - glossary_terms, analytics_events, security_logs
     """
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
@@ -65,46 +161,33 @@ def init_db(db_path: Optional[Path] = None) -> None:
             );
         """)
 
-        # 3. bulletins tablosu
-        existing_bulletin_cols = _table_columns(conn, "bulletins")
-        required_bulletin_cols = {
-            "id", "fund_code", "title", "category", "doc_type",
-            "source_institution", "publish_date", "period_covered",
-            "original_url", "raw_text", "ai_summary_json",
-            "content_origin_badge", "last_updated",
-        }
-        if existing_bulletin_cols and not required_bulletin_cols.issubset(set(existing_bulletin_cols)):
-            cursor.execute("DROP TABLE bulletins;")
-
+        # 3. bulletins tablosu (DROP TABLE ASLA YAPILMAZ, file_data Base64 sütunu korunur)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS bulletins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fund_code TEXT,
                 title TEXT NOT NULL,
-                category TEXT NOT NULL CHECK(category IN ('FON_SEKTOR_BULTENI', 'RESMI_DUYURU', 'KURUCU_BELGESI')),
-                doc_type TEXT NOT NULL CHECK(doc_type IN ('SPK_BULTENI', 'KAP_BILDIRIMI', 'AYLIK_FON_BULTENI', 'YATIRIMCI_BILGI_FORMU', 'IZAHNAME')),
+                category TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
                 source_institution TEXT NOT NULL,
                 publish_date TEXT NOT NULL,
                 period_covered TEXT NOT NULL,
                 original_url TEXT NOT NULL,
                 raw_text TEXT NOT NULL,
                 ai_summary_json TEXT NOT NULL,
-                content_origin_badge TEXT NOT NULL CHECK(content_origin_badge IN ('RESMI_BELGE_OZETI', 'DUZENLEYICI_DUYURU', 'SEKTOR_RAPORU')),
+                content_origin_badge TEXT NOT NULL,
+                file_data TEXT,
+                file_name TEXT,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        existing_bulletin_cols = _table_columns(conn, "bulletins")
+        if "file_data" not in existing_bulletin_cols:
+            cursor.execute("ALTER TABLE bulletins ADD COLUMN file_data TEXT;")
+        if "file_name" not in existing_bulletin_cols:
+            cursor.execute("ALTER TABLE bulletins ADD COLUMN file_name TEXT;")
 
-        # 4. evidence_cards tablosu
-        existing_evidence_cols = _table_columns(conn, "evidence_cards")
-        required_evidence_cols = {
-            "id", "order_no", "topic_slug", "question", "claim_summary",
-            "detailed_explanation", "official_source", "regulation_ref",
-            "source_date", "official_url", "user_meaning",
-            "limitations_and_risks", "common_misconception",
-        }
-        if existing_evidence_cols and not required_evidence_cols.issubset(set(existing_evidence_cols)):
-            cursor.execute("DROP TABLE evidence_cards;")
-
+        # 4. evidence_cards tablosu (DROP TABLE ASLA YAPILMAZ)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS evidence_cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +203,48 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 user_meaning TEXT NOT NULL,
                 limitations_and_risks TEXT NOT NULL,
                 common_misconception TEXT NOT NULL
+            );
+        """)
+
+        # 4b. glossary_terms & security_logs & site_settings & transparency_scores
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS glossary_terms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                term TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                tip TEXT NOT NULL,
+                spk TEXT NOT NULL,
+                importance TEXT NOT NULL,
+                display_order INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS security_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                severity TEXT NOT NULL DEFAULT 'INFO',
+                ip_address TEXT NOT NULL,
+                endpoint TEXT,
+                details TEXT,
+                blocked_until TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS site_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transparency_scores (
+                fund_code TEXT PRIMARY KEY,
+                fund_title TEXT NOT NULL,
+                total_score INTEGER NOT NULL DEFAULT 100,
+                details_json TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
 
@@ -451,6 +576,33 @@ def upsert_fund(
             (clean_code, fund_title, fund_type, clean_code),
         )
         conn.commit()
+    try:
+        pg_query(
+            """
+            INSERT INTO funds (fund_code, fund_title, fund_type, last_updated)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (fund_code) DO UPDATE SET
+                fund_title = EXCLUDED.fund_title,
+                fund_type = COALESCE(EXCLUDED.fund_type, funds.fund_type),
+                last_updated = CURRENT_TIMESTAMP;
+            """,
+            (clean_code, fund_title, fund_type),
+            fetch=False,
+        )
+        pg_query(
+            """
+            INSERT INTO tracked_funds (fund_code, fund_title, fund_type, is_default, created_at, last_updated)
+            VALUES (%s, %s, %s, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (fund_code) DO UPDATE SET
+                fund_title = EXCLUDED.fund_title,
+                fund_type = COALESCE(EXCLUDED.fund_type, tracked_funds.fund_type),
+                last_updated = CURRENT_TIMESTAMP;
+            """,
+            (clean_code, fund_title, fund_type),
+            fetch=False,
+        )
+    except Exception:
+        pass
 
 
 def bulk_upsert_fund_prices(
@@ -909,7 +1061,27 @@ def insert_contact_message(
             ),
         )
         conn.commit()
-        return int(cur.lastrowid)
+        local_id = int(cur.lastrowid)
+    try:
+        pg_query(
+            """
+            INSERT INTO contact_messages (
+                full_name, email, phone, subject, message, kvkk_approved, is_read, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, 0, CURRENT_TIMESTAMP);
+            """,
+            (
+                full_name.strip(),
+                email.strip(),
+                phone.strip(),
+                subject.strip(),
+                message.strip(),
+                1 if kvkk_approved else 0,
+            ),
+            fetch=False,
+        )
+    except Exception:
+        pass
+    return local_id
 
 
 def get_contact_messages(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:

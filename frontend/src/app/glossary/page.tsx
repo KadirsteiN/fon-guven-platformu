@@ -11,11 +11,12 @@ import {
   ChevronUp,
   SearchX,
 } from "lucide-react";
-import { trackTelemetryEvent } from "@/lib/api";
+import { apiFetch, trackTelemetryEvent } from "@/lib/api";
 import {
   GLOSSARY_CATEGORIES,
   GLOSSARY_TERMS,
   GlossaryCategory,
+  GlossaryTerm,
 } from "@/lib/glossaryData";
 
 const CATEGORY_STYLES: Record<GlossaryCategory, string> = {
@@ -30,10 +31,21 @@ const CATEGORY_STYLES: Record<GlossaryCategory, string> = {
 };
 
 export default function GlossaryPage() {
+  const [termsList, setTermsList] = useState<GlossaryTerm[]>(GLOSSARY_TERMS);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<GlossaryCategory | "ALL">("ALL");
   const [openTerm, setOpenTerm] = useState<string | null>(null);
   const lastSearchSent = useRef("");
+
+  useEffect(() => {
+    apiFetch<{ terms?: GlossaryTerm[] }>("/api/glossary")
+      .then((res) => {
+        if (Array.isArray(res?.terms) && res.terms.length > 0) {
+          setTermsList(res.terms);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const normalized = (s: string) =>
     s
@@ -43,14 +55,14 @@ export default function GlossaryPage() {
 
   const filtered = useMemo(() => {
     const q = normalized(query.trim());
-    return GLOSSARY_TERMS.filter((t) => {
+    return termsList.filter((t) => {
       if (category !== "ALL" && t.category !== category) return false;
       if (!q) return true;
       return normalized(
         `${t.term} ${t.tip} ${t.spk} ${t.importance} ${t.category}`
       ).includes(q);
     });
-  }, [query, category]);
+  }, [query, category, termsList]);
 
   // Arama telemetrisi (yazma durduktan 1.2 sn sonra, en az 3 karakter)
   useEffect(() => {

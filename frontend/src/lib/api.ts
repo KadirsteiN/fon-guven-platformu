@@ -1,6 +1,5 @@
-export const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-).replace(/\/+$/, "");
+// Render bağımlılığı kaldırıldı; tüm API çağrıları doğrudan Vercel Next.js Route Handlers + Neon PostgreSQL üzerinden çalışır.
+export const API_BASE_URL = "";
 
 export async function apiFetch<T>(
   endpoint: string,
