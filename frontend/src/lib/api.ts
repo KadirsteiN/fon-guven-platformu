@@ -134,7 +134,10 @@ export interface TelemetryEventPayload {
     | "REAL_RETURN_SIMULATE"
     | "REAL_RETURN_BENCHMARK_SELECT"
     | "GLOSSARY_TERM_READ"
-    | "GLOSSARY_SEARCH";
+    | "GLOSSARY_SEARCH"
+    | "ACADEMIC_PDF_REPORT_DOWNLOAD"
+    | "SPK_RISK_TEST_COMPLETE"
+    | string;
   module_name: string;
   page_path?: string | null;
   fund_code?: string | null;

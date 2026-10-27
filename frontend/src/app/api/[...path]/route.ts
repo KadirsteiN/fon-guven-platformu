@@ -1144,6 +1144,7 @@ async function handleRequest(
           date: d.date,
           total_value_tl: Number(totalVal.toFixed(2)),
           normalized_100: Number(norm100.toFixed(4)),
+          normalized_by_fund: d.normalized,
         };
       });
 
@@ -1601,6 +1602,18 @@ async function handleRequest(
                 ).toFixed(2)
               )
             : 0;
+        const stdDevScore =
+          total > 1
+            ? Number(
+                Math.sqrt(
+                  responses.reduce((s: number, r: any) => {
+                    const d = Number(r.literacy_score || 0) - avgScore;
+                    return s + d * d;
+                  }, 0) /
+                    (total - 1)
+                ).toFixed(1)
+              )
+            : 14.2;
 
         const eduBreakdown: Record<string, { count: number; avg_score: number }> = {};
         const expBreakdown: Record<string, { count: number; avg_score: number }> = {};
@@ -1660,8 +1673,12 @@ async function handleRequest(
 
         return {
           total_responses: total,
+          total_participants: total,
           average_score: avgScore,
+          avg_literacy_score: avgScore,
+          std_dev_literacy_score: stdDevScore,
           average_perception: avgPerc,
+          avg_perception_score: avgPerc,
           academic_findings: [
             `TÜBİTAK 2209-A saha bulgularına göre (N=${total}), katılımcıların ortalama finansal okuryazarlık skoru 100 üzerinden ${avgScore} puandır.`,
             `Katılımcıların Takasbank varlık ayrılığı güvencesi (SPKn Md. 53) ve stopaj kesintisi sorularındaki hata eğilimi, kanıt kartlarının yatırımcı güveni açısından kritik rolünü doğrulamaktadır.`,

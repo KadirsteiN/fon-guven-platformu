@@ -66,12 +66,15 @@ export default function RealReturnSimulator({
   periodReturnPct,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"A" | "B">("A");
+  const [tab, setTab] = useState<"A" | "B" | "C">("A");
   const [amount, setAmount] = useState<number>(defaultAmount);
   const [mgmtFee, setMgmtFee] = useState<number>(2.0);
   const [stopaj, setStopaj] = useState<number>(10.0);
   const [inflation, setInflation] = useState<number>(33.0);
   const [deposit, setDeposit] = useState<number>(40.0);
+  const [expectedAnnualGrossPct, setExpectedAnnualGrossPct] = useState<number>(38.0);
+  const [lowFeeRate, setLowFeeRate] = useState<number>(0.75);
+  const [highFeeRate, setHighFeeRate] = useState<number>(3.2);
   const [apiData, setApiData] = useState<any>(null);
   const [selected, setSelected] = useState<string[]>(DEFAULT_SELECTED);
 
@@ -683,6 +686,18 @@ export default function RealReturnSimulator({
           <Globe2 className="w-4 h-4" />
           Bölüm 2: Küresel &amp; Yerel Yatırım Araçları Benchmark Kıyaslaması
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("C")}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-all ${
+            tab === "C"
+              ? "bg-amber-600 text-white shadow-sm"
+              : "bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100"
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          📉 Bölüm 3: 10 Yıllık Bileşik Yönetim Ücreti Erimesi (Servet Projeksiyonu)
+        </button>
       </div>
 
       {/* BÖLÜM 1: NET REEL GETİRİ & KESİNTİ ANALİZİ */}
@@ -1229,6 +1244,216 @@ export default function RealReturnSimulator({
           </div>
         </div>
       )}
+
+      {/* BÖLÜM 3 (MODÜL 8): 10 YILLIK BİLEŞİK YÖNETİM ÜCRETİ ERİMESİ (COMPOUND FEE EROSION) */}
+      {tab === "C" && (() => {
+        const basePrincipal = sim.initial_amount_tl;
+        const grossR = expectedAnnualGrossPct / 100;
+        const lowNetR = Math.max(-0.5, grossR - lowFeeRate / 100);
+        const highNetR = Math.max(-0.5, grossR - highFeeRate / 100);
+
+        const yearsList = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        const erosionSeries = yearsList.map((yr) => {
+          const lowVal = Math.round(basePrincipal * Math.pow(1 + lowNetR, yr));
+          const highVal = Math.round(basePrincipal * Math.pow(1 + highNetR, yr));
+          return {
+            year_label: `${yr}. Yıl`,
+            LOW_FEE_FUND: lowVal,
+            HIGH_FEE_FUND: highVal,
+            WEALTH_LOSS_GAP: Math.max(0, lowVal - highVal),
+          };
+        });
+
+        const milestones = [1, 3, 5, 10].map((yr) => {
+          const row = erosionSeries[yr];
+          return {
+            year: yr,
+            lowVal: row.LOW_FEE_FUND,
+            highVal: row.HIGH_FEE_FUND,
+            lossTl: row.WEALTH_LOSS_GAP,
+            lossPctOfPrincipal: Number(
+              ((row.WEALTH_LOSS_GAP / Math.max(1, basePrincipal)) * 100).toFixed(1)
+            ),
+          };
+        });
+
+        const yr10 = milestones[milestones.length - 1];
+
+        return (
+          <div className="space-y-6">
+            <div className="p-4 sm:p-5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 space-y-3">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-xs sm:text-sm font-extrabold text-amber-900 dark:text-amber-200">
+                    📉 &ldquo;Bileşik Kesinti Erimesi&rdquo; — Uzun Vadeli (1, 3, 5 ve 10 Yıl) Yönetim Ücreti Servet Projeksiyonu
+                  </div>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                    Yıllık sadece <strong>%{formatNumberTR(highFeeRate - lowFeeRate, 2)}</strong> puanlık yönetim ücreti farkı küçük görünebilir; ancak bileşik getiri (compounding) nedeniyle 10 yıl sonunda iki fon arasındaki makas devasa bir servet kaybına dönüşür.
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-rose-600 text-white text-right shrink-0 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase opacity-90">
+                    10. Yıl Sonu Yönetim Ücretine Giden Kümülatif Servet Kaybı
+                  </div>
+                  <div className="text-xl font-extrabold font-mono mt-0.5">
+                    −{formatCurrencyTL(yr10.lossTl)}
+                  </div>
+                  <div className="text-[10px] opacity-90">
+                    Ana Paranın %{formatNumberTR(yr10.lossPctOfPrincipal, 1)} Kadar Ekstra Kayıp!
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 Parametre Ayarı */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-amber-200 dark:border-amber-800/60">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
+                    Beklenen Yıllık Brüt Getiri (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min={5}
+                    max={100}
+                    value={expectedAnnualGrossPct}
+                    onChange={(e) =>
+                      setExpectedAnnualGrossPct(Math.max(1, Number(e.target.value) || 35))
+                    }
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-emerald-700 dark:text-emerald-300 mb-1">
+                    Düşük Kesintili Fon Yıllık TGO (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min={0.1}
+                    max={5}
+                    value={lowFeeRate}
+                    onChange={(e) =>
+                      setLowFeeRate(Math.max(0, Number(e.target.value) || 0.75))
+                    }
+                    className="w-full px-3 py-1.5 rounded-lg border border-emerald-400 dark:border-emerald-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-rose-700 dark:text-rose-300 mb-1">
+                    Yüksek Kesintili Fon Yıllık TGO (%):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min={0.5}
+                    max={8}
+                    value={highFeeRate}
+                    onChange={(e) =>
+                      setHighFeeRate(Math.max(0.1, Number(e.target.value) || 3.2))
+                    }
+                    className="w-full px-3 py-1.5 rounded-lg border border-rose-400 dark:border-rose-700 bg-white dark:bg-slate-900 text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 1, 3, 5 ve 10 Yıl Servet Farkı Kartları */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {milestones.map((m) => (
+                <div
+                  key={m.year}
+                  className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-extrabold text-slate-900 dark:text-white">
+                      {m.year} Yıl Sonunda
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-mono font-bold text-[10px]">
+                      Fark: −{formatCurrencyTL(m.lossTl)}
+                    </span>
+                  </div>
+                  <div className="text-[11px] flex justify-between text-emerald-700 dark:text-emerald-400 font-mono">
+                    <span>Düşük TGO (%{formatNumberTR(lowFeeRate, 2)}):</span>
+                    <strong>{formatCurrencyTL(m.lowVal)}</strong>
+                  </div>
+                  <div className="text-[11px] flex justify-between text-rose-600 dark:text-rose-400 font-mono">
+                    <span>Yüksek TGO (%{formatNumberTR(highFeeRate, 2)}):</span>
+                    <strong>{formatCurrencyTL(m.highVal)}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* İki Çizgi Arasındaki Makas Grafiği (Gap Chart) */}
+            <div className="space-y-2">
+              <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                📈 10 Yıllık Bileşik Büyüme Makası: Düşük Kesintili Fon (%{formatNumberTR(lowFeeRate, 2)}) vs. Yüksek Kesintili Fon (%{formatNumberTR(highFeeRate, 2)})
+              </div>
+              <SvgLineChart
+                data={erosionSeries}
+                xKey="year_label"
+                series={[
+                  {
+                    key: "LOW_FEE_FUND",
+                    label: `Düşük Kesintili Fon (%${formatNumberTR(lowFeeRate, 2)} TGO)`,
+                    color: "#059669",
+                  },
+                  {
+                    key: "HIGH_FEE_FUND",
+                    label: `Yüksek Kesintili Fon (%${formatNumberTR(highFeeRate, 2)} TGO)`,
+                    color: "#e11d48",
+                  },
+                ]}
+                yUnit=" TL"
+                referenceLineValue={basePrincipal}
+                referenceLineLabel="Başlangıç Sermayesi"
+              />
+            </div>
+
+            {/* 1, 3, 5 ve 10 Yıllık Detaylı Tablo */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500">
+                    <th className="p-3">Vade (Yıl)</th>
+                    <th className="p-3 text-right">
+                      Düşük Kesintili Fon (%{formatNumberTR(lowFeeRate, 2)} TGO)
+                    </th>
+                    <th className="p-3 text-right">
+                      Yüksek Kesintili Fon (%{formatNumberTR(highFeeRate, 2)} TGO)
+                    </th>
+                    <th className="p-3 text-right">
+                      Yönetim Ücretine Giden Kümülatif Servet Kaybı (TL)
+                    </th>
+                    <th className="p-3 text-right">Ana Paraya Oranla Kayıp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {milestones.map((m) => (
+                    <tr key={m.year}>
+                      <td className="p-3 font-extrabold text-slate-900 dark:text-white">
+                        {m.year}. Yıl Sonu
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-emerald-600">
+                        {formatCurrencyTL(m.lowVal)}
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
+                        {formatCurrencyTL(m.highVal)}
+                      </td>
+                      <td className="p-3 text-right font-mono font-extrabold text-rose-600">
+                        −{formatCurrencyTL(m.lossTl)}
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-rose-600">
+                        −%{formatNumberTR(m.lossPctOfPrincipal, 1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Akademik Metodoloji ve Fisher Denklemi Kutusu (TÜBİTAK 2209-A) */}
       <details

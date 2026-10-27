@@ -9,6 +9,12 @@ import {
   Shield,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  StyleDriftRadar,
+  ClosetIndexingDetective,
+  AcademicPdfReportButton,
+  SpkRiskProfileMatcher,
+} from "@/components/AcademicModules";
 
 export default function TransparencyPage() {
   const [fundsList, setFundsList] = useState<any[]>([]);
@@ -92,7 +98,13 @@ export default function TransparencyPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-4 shrink-0">
+            <div className="flex flex-wrap items-center gap-4 shrink-0">
+              <AcademicPdfReportButton
+                fundCode={evalData.fund_code || selectedFund}
+                fundTitle={evalData.fund_title}
+                fundType={evalData.fund_type}
+                evalData={evalData}
+              />
               <div className="text-right">
                 <div className="text-xs text-slate-500">
                   Yapısal Şeffaflık Derecesi
@@ -109,6 +121,21 @@ export default function TransparencyPage() {
               </div>
             </div>
           </div>
+
+          {/* MODÜL 7: SPK Uygunluk Testi Simülatörü (Kişisel Risk Profili 1-7 vs. Fon Risk Değeri Eşleştirici) */}
+          <SpkRiskProfileMatcher fundCodes={[evalData.fund_code || selectedFund]} />
+
+          {/* MODÜL 1: Bülten Vaadi vs. Fiili Portföy Sapma Denetçisi (Style Drift Radarı) */}
+          <StyleDriftRadar
+            fundCode={evalData.fund_code || selectedFund}
+            fundTitle={evalData.fund_title}
+            fundType={evalData.fund_type}
+          />
+
+          {/* MODÜL 2: Gizli İndeksleme (Closet Indexing - R²) ve Alfa (α) Üretim Dedektifi */}
+          <ClosetIndexingDetective
+            fundCodes={[evalData.fund_code || selectedFund]}
+          />
 
           {/* 4 Kriter Kırılımı */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

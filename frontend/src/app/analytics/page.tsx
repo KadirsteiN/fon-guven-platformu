@@ -14,6 +14,14 @@ import {
 import { API_BASE_URL, apiFetch, formatNumberTR } from "@/lib/api";
 import SvgLineChart from "@/components/SvgLineChart";
 import RealReturnSimulator from "@/components/RealReturnSimulator";
+import {
+  AcademicPdfReportButton,
+  BehavioralFinanceSimulator,
+  ClosetIndexingDetective,
+  HistoricalStressTestLab,
+  SpkRiskProfileMatcher,
+  StyleDriftRadar,
+} from "@/components/AcademicModules";
 
 const PALETTE = [
   "#2563eb",
@@ -406,6 +414,12 @@ export default function AnalyticsPage() {
                   Kaynak: {data.source} ({data.common_trading_days_count} İşlem
                   Günü)
                 </span>
+                <AcademicPdfReportButton
+                  fundCode={selectedCodes[0] || "AFT"}
+                  fundTitle={data.funds_summary?.[0]?.fund_title}
+                  fundType={data.funds_summary?.[0]?.fund_type}
+                  periodReturnPct={data.funds_summary?.[0]?.return_pct}
+                />
                 <button
                   type="button"
                   onClick={handleDownloadExcel}
@@ -541,6 +555,32 @@ export default function AnalyticsPage() {
             defaultAmount={100000}
             fundsSummary={data.funds_summary}
             dailySeries={data.daily_series}
+          />
+
+          {/* MODÜL 7: SPK Uygunluk Testi Simülatörü (Kişisel Risk Profili 1-7 vs. Fon Risk Değeri Eşleştirici) */}
+          <SpkRiskProfileMatcher fundCodes={selectedCodes} />
+
+          {/* MODÜL 2: Gizli İndeksleme (Closet Indexing - R²) ve Alfa (α) Üretim Dedektifi */}
+          <ClosetIndexingDetective
+            fundCodes={selectedCodes}
+            fundsSummary={data.funds_summary}
+          />
+
+          {/* MODÜL 5: Davranışsal Finans Modülü: Panik Satışı vs. Düzenli Birikim (DCA) vs. Sabırlı Yatırımcı */}
+          <BehavioralFinanceSimulator
+            fundCodes={selectedCodes}
+            dailySeries={data.daily_series}
+            initialAmount={100000}
+          />
+
+          {/* MODÜL 6: Tarihi Kriz ve Şok Stres Testi ("O Gün Ne Oldu?" Laboratuvarı) */}
+          <HistoricalStressTestLab fundCodes={selectedCodes} />
+
+          {/* MODÜL 1: Seçili Ana Fon İçin Bülten Vaadi vs. Fiili Portföy Sapma Denetçisi */}
+          <StyleDriftRadar
+            fundCode={selectedCodes[0] || "AFT"}
+            fundTitle={data.funds_summary?.[0]?.fund_title}
+            fundType={data.funds_summary?.[0]?.fund_type}
           />
         </>
       )}
