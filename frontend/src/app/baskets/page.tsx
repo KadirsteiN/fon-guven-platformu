@@ -26,7 +26,7 @@ export default function BasketsPage() {
     "TÜBİTAK 2209-A Dengeli Test Sepeti (40.000 TL)"
   );
   const [startDate, setStartDate] = useState("2026-01-03");
-  const [endDate, setEndDate] = useState("2026-10-16");
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [allocations, setAllocations] = useState([
     { fund_code: "AFT", amount_tl: 10000 },
     { fund_code: "TTA", amount_tl: 12000 },
@@ -36,15 +36,17 @@ export default function BasketsPage() {
   const [simResult, setSimResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const runSimulation = async () => {
+  const runSimulation = async (customStart?: string, customEnd?: string) => {
+    const sDate = customStart || startDate;
+    const eDate = customEnd || endDate;
     setLoading(true);
     try {
       const res = await apiFetch<any>("/api/baskets/simulate", {
         method: "POST",
         body: JSON.stringify({
           allocations,
-          start_date: startDate,
-          end_date: endDate,
+          start_date: sDate,
+          end_date: eDate,
         }),
       });
       setSimResult(res);
@@ -63,6 +65,17 @@ export default function BasketsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyQuickPeriod = (months: number) => {
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const past = new Date(now);
+    past.setMonth(past.getMonth() - months);
+    const pastStr = past.toISOString().split("T")[0];
+    setStartDate(pastStr);
+    setEndDate(todayStr);
+    runSimulation(pastStr, todayStr);
   };
 
   useEffect(() => {
@@ -252,6 +265,29 @@ export default function BasketsPage() {
 
       {/* Sepet Kurulum Formu */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+            Hızlı Dönem Seçimi (Bugünün Tarihinden Geriye Doğru):
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { label: "1 Ay", months: 1 },
+              { label: "3 Ay", months: 3 },
+              { label: "6 Ay", months: 6 },
+              { label: "1 Yıl", months: 12 },
+            ].map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => applyQuickPeriod(p.months)}
+                className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-indigo-600 hover:text-white dark:bg-slate-800 dark:hover:bg-indigo-600 text-xs font-bold transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
@@ -271,21 +307,17 @@ export default function BasketsPage() {
             <input
               type="date"
               value={startDate}
-              min="2025-10-16"
-              max="2026-10-16"
               onChange={(e) => setStartDate(e.target.value)}
               className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
             />
           </div>
           <div>
             <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-              Bitiş Tarihi:
+              Bitiş Tarihi (Varsayılan: Bugün):
             </label>
             <input
               type="date"
               value={endDate}
-              min="2025-10-16"
-              max="2026-10-16"
               onChange={(e) => setEndDate(e.target.value)}
               className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
             />
@@ -353,7 +385,7 @@ export default function BasketsPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <button
-            onClick={runSimulation}
+            onClick={() => runSimulation()}
             disabled={loading}
             className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
           >

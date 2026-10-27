@@ -74,6 +74,10 @@ export default function Footer() {
   const [legalTexts, setLegalTexts] =
     useState<LegalTextsMap>(DEFAULT_LEGAL_TEXTS);
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
+  const [footerBranding, setFooterBranding] = useState({
+    site_title: "Fon Güven & Şeffaflık Platformu",
+    site_logo_url: "",
+  });
 
   const loadLegalTexts = () => {
     apiFetch<Partial<LegalTextsMap>>("/api/public/legal-texts")
@@ -94,14 +98,28 @@ export default function Footer() {
         }
       })
       .catch(() => {});
+
+    apiFetch<any>("/api/public/settings")
+      .then((res) => {
+        if (res) {
+          setFooterBranding({
+            site_title: res.site_title || "Fon Güven & Şeffaflık Platformu",
+            site_logo_url: res.site_logo || res.site_logo_url || "",
+          });
+        }
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
     loadLegalTexts();
     const handleLegalUpdated = () => loadLegalTexts();
     window.addEventListener("legal-texts-updated", handleLegalUpdated);
-    return () =>
+    window.addEventListener("branding-updated", handleLegalUpdated);
+    return () => {
       window.removeEventListener("legal-texts-updated", handleLegalUpdated);
+      window.removeEventListener("branding-updated", handleLegalUpdated);
+    };
   }, []);
 
   const currentModalMeta = activeModal ? MODAL_META[activeModal] : null;
@@ -124,10 +142,19 @@ export default function Footer() {
 
           {/* Alt Telif Hakkı, TÜBİTAK 2209-A İbaresi ve Yasal Modal Bağlantıları */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-2 border-t border-slate-800/80 text-xs">
-            <div className="text-slate-400 leading-relaxed">
-              © 2026 Fon Güven & Şeffaflık Platformu — TÜBİTAK 2209-A Üniversite
-              Öğrencileri Araştırma Projeleri Destekleme Programı Kapsamında
-              Geliştirilmiştir.
+            <div className="flex items-center gap-2.5 text-slate-400 leading-relaxed">
+              {footerBranding.site_logo_url && (
+                <img
+                  src={footerBranding.site_logo_url}
+                  alt={footerBranding.site_title}
+                  className="w-7 h-7 rounded-lg object-contain bg-slate-800 p-0.5 border border-slate-700 shrink-0"
+                />
+              )}
+              <span>
+                © 2026 {footerBranding.site_title} — TÜBİTAK 2209-A Üniversite
+                Öğrencileri Araştırma Projeleri Destekleme Programı Kapsamında
+                Geliştirilmiştir.
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">

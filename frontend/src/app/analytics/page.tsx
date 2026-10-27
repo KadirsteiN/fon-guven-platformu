@@ -75,14 +75,16 @@ export default function AnalyticsPage() {
   ]);
   const [fundSearchQuery, setFundSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("2026-01-03");
-  const [endDate, setEndDate] = useState("2026-10-16");
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const runComparison = async (codesToRun?: string[]) => {
+  const runComparison = async (codesToRun?: string[], customStart?: string, customEnd?: string) => {
     const codes = codesToRun || selectedCodes;
+    const sDate = customStart || startDate;
+    const eDate = customEnd || endDate;
     if (codes.length === 0) return;
     setLoading(true);
     setError(null);
@@ -91,8 +93,8 @@ export default function AnalyticsPage() {
         method: "POST",
         body: JSON.stringify({
           fund_codes: codes,
-          start_date: startDate,
-          end_date: endDate,
+          start_date: sDate,
+          end_date: eDate,
         }),
       });
       setData(res);
@@ -101,6 +103,17 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyQuickPeriod = (months: number) => {
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const past = new Date(now);
+    past.setMonth(past.getMonth() - months);
+    const pastStr = past.toISOString().split("T")[0];
+    setStartDate(pastStr);
+    setEndDate(todayStr);
+    runComparison(selectedCodes, pastStr, todayStr);
   };
 
   useEffect(() => {
@@ -333,43 +346,64 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Tarih Seçimi ve Analizi Çalıştır */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">
-          <div className="md:col-span-4">
-            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-              Başlangıç Tarihi:
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              min="2025-10-16"
-              max="2026-10-16"
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-            />
+        {/* Tarih Seçimi, Hızlı Dönem Butonları ve Analizi Çalıştır */}
+        <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              Hızlı Dönem Seçimi (Bugünün Tarihinden Geriye Doğru):
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { label: "1 Ay", months: 1 },
+                { label: "3 Ay", months: 3 },
+                { label: "6 Ay", months: 6 },
+                { label: "1 Yıl", months: 12 },
+              ].map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => applyQuickPeriod(p.months)}
+                  className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-slate-800 dark:hover:bg-blue-600 text-xs font-bold transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="md:col-span-4">
-            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-              Bitiş Tarihi:
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              min="2025-10-16"
-              max="2026-10-16"
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-            />
-          </div>
-          <div className="md:col-span-4 flex items-end gap-2">
-            <button
-              onClick={() => runComparison()}
-              disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              <Play className="w-3.5 h-3.5" />
-              {loading ? "Hesaplanıyor..." : "Analizi Çalıştır"}
-            </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-4">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                Başlangıç Tarihi:
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              />
+            </div>
+            <div className="md:col-span-4">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                Bitiş Tarihi (Varsayılan: Bugün):
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              />
+            </div>
+            <div className="md:col-span-4 flex items-end gap-2">
+              <button
+                onClick={() => runComparison()}
+                disabled={loading}
+                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {loading ? "Hesaplanıyor..." : "Analizi Çalıştır"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

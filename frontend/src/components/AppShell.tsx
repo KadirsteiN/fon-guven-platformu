@@ -100,7 +100,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             site_title: res.site_title || "Fon Güven & Şeffaflık",
             site_subtitle:
               res.site_subtitle || "TÜBİTAK 2209-A Araştırma Platformu",
-            site_logo_url: res.site_logo_url || "",
+            site_logo_url: res.site_logo || res.site_logo_url || "",
           });
         }
       })
@@ -195,7 +195,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const resolvedLogoSrc = branding.site_logo_url
-    ? branding.site_logo_url.startsWith("http")
+    ? branding.site_logo_url.startsWith("http") ||
+      branding.site_logo_url.startsWith("data:")
       ? branding.site_logo_url
       : `${API_BASE_URL}${branding.site_logo_url}`
     : "";
@@ -349,8 +350,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Menu className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                {branding.site_title} — {branding.site_subtitle}
+              <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                {resolvedLogoSrc && (
+                  <img
+                    src={resolvedLogoSrc}
+                    alt={branding.site_title}
+                    className="w-6 h-6 rounded-lg object-contain lg:hidden shrink-0"
+                  />
+                )}
+                <span>
+                  {branding.site_title} — {branding.site_subtitle}
+                </span>
               </h1>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
                 Fonlara Güven & Kanıt Merkezi • Fon Şeffaflık Kontrolü • Fon

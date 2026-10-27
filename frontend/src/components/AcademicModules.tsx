@@ -996,7 +996,7 @@ export function AcademicPdfReportButton({
 // ─────────────────────────────────────────────────────────────────────────────
 // MODÜL 7: 🛡️ SPK UYGUNLUK TESTİ SİMÜLATÖRÜ (KİŞİSEL RİSK PROFİLİ 1-7 EŞLEŞTİRİCİ)
 // ─────────────────────────────────────────────────────────────────────────────
-const SPK_QUIZ_QUESTIONS = [
+export const SPK_QUIZ_QUESTIONS = [
   {
     id: "q1",
     question: "1. Yatırım fonlarındaki birikiminizi ne kadar süreyle değerlendirmeyi planlıyorsunuz?",
@@ -1039,21 +1039,14 @@ const SPK_QUIZ_QUESTIONS = [
   },
 ];
 
-const STORAGE_KEY_RISK = "spk_user_risk_profile_v1";
+export const STORAGE_KEY_RISK = "spk_user_risk_profile_v1";
 
 export function SpkRiskProfileMatcher({
   fundCodes,
 }: {
   fundCodes: string[];
 }) {
-  const [userRisk, setUserRisk] = useState<number>(4);
-  const [quizOpen, setQuizOpen] = useState<boolean>(false);
-  const [answers, setAnswers] = useState<Record<string, number>>({
-    q1: 5,
-    q2: 5,
-    q3: 4,
-    q4: 4,
-  });
+  const [userRisk, setUserRisk] = useState<number>(5);
 
   useEffect(() => {
     try {
@@ -1074,27 +1067,6 @@ export function SpkRiskProfileMatcher({
     return () => window.removeEventListener("spk-risk-profile-updated", onSync);
   }, []);
 
-  const saveRiskScore = (score: number) => {
-    const clamped = Math.max(1, Math.min(7, Math.round(score)));
-    setUserRisk(clamped);
-    try {
-      window.localStorage.setItem(STORAGE_KEY_RISK, String(clamped));
-      window.dispatchEvent(new Event("spk-risk-profile-updated"));
-    } catch {}
-  };
-
-  const handleCalculateQuiz = () => {
-    const vals = Object.values(answers);
-    const avg = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
-    saveRiskScore(avg);
-    setQuizOpen(false);
-    trackTelemetryEvent({
-      event_type: "SPK_RISK_TEST_COMPLETE",
-      module_name: "spk_suitability",
-      metadata: { calculated_risk: Math.round(avg) },
-    });
-  };
-
   const profiles = useMemo(
     () => (fundCodes.length > 0 ? fundCodes : ["AFT"]).map((c) => getFundAcademicProfile(c)),
     [fundCodes]
@@ -1102,149 +1074,59 @@ export function SpkRiskProfileMatcher({
 
   const riskProfileLabel =
     userRisk <= 2
-      ? "Çok Düşük Riskli / Muhafazakâr Yatırımcı"
+      ? "Muhafazakâr Yatırımcı"
       : userRisk <= 4
-      ? "Dengeli / Orta Risk Toleranslı Yatırımcı"
+      ? "Dengeli Yatırımcı"
       : userRisk === 5
-      ? "Büyüme Odaklı / Dinamik Yatırımcı"
-      : "Yüksek Risk Toleranslı / Agresif Yatırımcı";
+      ? "Dengeli / Büyüme Odaklı Yatırımcı"
+      : "Agresif / Yüksek Risk Odaklı Yatırımcı";
 
   return (
-    <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
+    <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2.5 py-1 rounded-full">
             <UserCheck className="w-3.5 h-3.5" />
-            SPK Uygunluk Testi Simülatörü • Kişisel Risk Profili (1-7) vs. Fon Risk Değeri Eşleştirici
+            SPK Kişisel Risk Profili: {userRisk}/7 ({riskProfileLabel})
           </span>
-          <h3 className="text-base sm:text-lg font-bold">
-            Kişisel SPK Risk Toleransınız ({userRisk}/7) ile Seçili Fonların Risk Değeri Uyumlu mu?
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            SPK Yatırım Hizmetleri Tebliği uyarınca her fonun 1 (En Düşük) ile 7 (En Yüksek) arasında resmi bir risk değeri vardır.
-          </p>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Seçili fonların SPK risk değeri ile kişisel profilinizin uyumu:
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl text-xs">
-            <span className="font-semibold text-slate-600 dark:text-slate-300 mr-1">
-              Risk Profilim:
-            </span>
-            {[1, 2, 3, 4, 5, 6, 7].map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => saveRiskScore(r)}
-                className={`w-6 h-6 rounded-lg font-mono font-extrabold text-xs transition-all ${
-                  userRisk === r
-                    ? "bg-teal-600 text-white shadow-sm scale-105"
-                    : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setQuizOpen(!quizOpen)}
-            className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            {quizOpen ? "Testi Kapat" : "🛡️ 4 Soruda Risk Profilimi Hesapla"}
-          </button>
-        </div>
+        <a
+          href="/survey?tab=risk"
+          className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm shrink-0"
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          🛡️ SPK Risk Profili Testini Çöz / Güncelle →
+        </a>
       </div>
 
-      {/* 4 Soruluk İnteraktif SPK Uygunluk Testi */}
-      {quizOpen && (
-        <div className="p-5 rounded-xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-900 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-xs sm:text-sm font-extrabold text-teal-900 dark:text-teal-200">
-              📋 SPK Standart Yatırımcı Risk ve Uygunluk Testi Simülasyonu (4 Soru)
-            </div>
-            <span className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold">
-              Mevcut Profiliniz: {userRisk}/7 ({riskProfileLabel})
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {SPK_QUIZ_QUESTIONS.map((q) => (
-              <div
-                key={q.id}
-                className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2"
-              >
-                <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                  {q.question}
-                </div>
-                <div className="space-y-1.5">
-                  {q.options.map((opt) => (
-                    <label
-                      key={opt.label}
-                      className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
-                        answers[q.id] === opt.points
-                          ? "border-teal-600 bg-teal-50/70 dark:bg-teal-950/40 font-semibold"
-                          : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name={q.id}
-                        checked={answers[q.id] === opt.points}
-                        onChange={() =>
-                          setAnswers((prev) => ({ ...prev, [q.id]: opt.points }))
-                        }
-                        className="mt-0.5 text-teal-600"
-                      />
-                      <span>{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleCalculateQuiz}
-              className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold shadow-sm"
-            >
-              ✅ Risk Profilimi Kaydet ve Fonlarla Eşleştir
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Seçili Fonlar İçin Otomatik SPK Uygunluk Eşleştirme Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* Seçili Fonlar İçin Kompakt SPK Risk Uyumu Rozetleri */}
+      <div className="flex flex-wrap gap-2.5">
         {profiles.map((p) => {
           const exceeded = p.spk_risk_value > userRisk;
           return (
             <div
               key={p.fund_code}
-              className={`p-4 rounded-xl border flex items-start gap-3 text-xs ${
+              className={`px-3.5 py-2 rounded-xl border inline-flex items-center gap-2 text-xs ${
                 exceeded
-                  ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200"
-                  : "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                  ? "bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                  : "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
               }`}
             >
               {exceeded ? (
-                <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
               ) : (
-                <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
               )}
-              <div className="space-y-1">
-                <div className="font-extrabold">
-                  {exceeded
-                    ? `🔴 SPK Uygunluk Uyarısı: Bu fonun risk değeri (${p.spk_risk_value}/7), sizin kişisel risk tolerans profilinizin (${userRisk}/7) üzerindedir`
-                    : `🟢 Risk Profilinize Uygun: [${p.fund_code}] fonunun risk değeri (${p.spk_risk_value}/7), kişisel risk tolerans profilinizle (${userRisk}/7) uyumludur`}
-                </div>
-                <div className="text-[11px] opacity-85">
-                  [{p.fund_code}] {p.fund_title} • Kategori: {p.fund_type} (Yıllık Volatilite: %{formatNumberTR(p.annualized_volatility_pct, 1)})
-                </div>
-              </div>
+              <span className="font-bold">[{p.fund_code}] SPK Risk Uyumu:</span>
+              <span>
+                {exceeded
+                  ? `⚠️ Risk Toleransınızdan Yüksek (Fon: ${p.spk_risk_value}/7 > Profiliniz: ${userRisk}/7)`
+                  : `✅ Profilinize Uygun (Fon: ${p.spk_risk_value}/7 ≤ Profiliniz: ${userRisk}/7)`}
+              </span>
             </div>
           );
         })}

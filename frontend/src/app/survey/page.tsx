@@ -254,9 +254,21 @@ const FALLBACK_QUESTIONS: Question[] = [
 ];
 
 export default function SurveyPage() {
+  const [activeTab, setActiveTab] = useState<"tubitak_survey" | "spk_risk_test">("tubitak_survey");
   const [questions, setQuestions] = useState<Question[]>(FALLBACK_QUESTIONS);
   const [step, setStep] = useState<"intro" | "demographics" | "questions" | "result">("intro");
   const [currentIdx, setCurrentIdx] = useState(0);
+
+  // SPK Kişisel Risk Profili Testi (1-7 Ölçeği) Durumu
+  const [spkRiskScore, setSpkRiskScore] = useState<number>(5);
+  const [spkQuizCompleted, setSpkQuizCompleted] = useState<boolean>(false);
+  const [spkAnswers, setSpkAnswers] = useState<Record<string, number>>({
+    q1: 5,
+    q2: 5,
+    q3: 5,
+    q4: 4,
+    q5: 5,
+  });
 
   // Demografik Bilgiler
   const [ageGroup, setAgeGroup] = useState("26-35");
@@ -293,6 +305,18 @@ export default function SurveyPage() {
 
   useEffect(() => {
     try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "risk") {
+        setActiveTab("spk_risk_test");
+      }
+      const savedRisk = localStorage.getItem("spk_user_risk_profile_v1");
+      if (savedRisk) {
+        const parsed = Number(savedRisk);
+        if (parsed >= 1 && parsed <= 7) {
+          setSpkRiskScore(parsed);
+          setSpkQuizCompleted(true);
+        }
+      }
       const lastSub = localStorage.getItem("tubitak2209a_survey_submitted_at");
       if (lastSub && Date.now() - Number(lastSub) < 24 * 60 * 60 * 1000) {
         setAlreadyParticipatedMsg(
@@ -308,6 +332,22 @@ export default function SurveyPage() {
       })
       .catch(() => {});
   }, []);
+
+  const saveSpkRiskProfile = (score: number) => {
+    const clamped = Math.max(1, Math.min(7, Math.round(score)));
+    setSpkRiskScore(clamped);
+    setSpkQuizCompleted(true);
+    try {
+      localStorage.setItem("spk_user_risk_profile_v1", String(clamped));
+      window.dispatchEvent(new Event("spk-risk-profile-updated"));
+    } catch {}
+  };
+
+  const handleCalculateSpkQuiz = () => {
+    const vals = Object.values(spkAnswers);
+    const avg = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
+    saveSpkRiskProfile(avg);
+  };
 
   const handleStartSurvey = () => {
     setStartTime(Date.now());
@@ -441,6 +481,116 @@ export default function SurveyPage() {
   const curQ = questions[currentIdx];
   const progressPct = Math.round(((currentIdx + 1) / questions.length) * 100);
 
+  const SPK_SUITABILITY_QUESTIONS = [
+    {
+      id: "q1",
+      question: "1. Yatırım fonlarındaki birikiminizi ne kadar süreyle değerlendirmeyi planlıyorsunuz?",
+      options: [
+        { label: "0 - 6 Ay (Çok Kısa Vade / Acil Nakit İhtiyacı Olabilir)", points: 1 },
+        { label: "6 Ay - 1 Yıl (Kısa-Orta Vade)", points: 3 },
+        { label: "1 - 3 Yıl (Orta Vade)", points: 5 },
+        { label: "3 Yıl ve Üzeri (Uzun Vadeli Sermaye Büyümesi)", points: 7 },
+      ],
+    },
+    {
+      id: "q2",
+      question: "2. Yatırım yaptığınız fonun değeri piyasa dalgalanmasıyla 1 ayda %15 düşerse tepkiniz ne olur?",
+      options: [
+        { label: "Derhal tamamını satarım, ana para kaybına hiç tahammülüm yok", points: 1 },
+        { label: "Bir kısmını satıp para piyasası / mevduat fonuna geçerim", points: 3 },
+        { label: "Sabırla beklerim, bülten ve izahname stratejisini kontrol ederim", points: 5 },
+        { label: "Uzun vadeli yatırımcıyım; düşüşü kademeli ek alım (DCA) fırsatı görürüm", points: 7 },
+      ],
+    },
+    {
+      id: "q3",
+      question: "3. Getiri ve risk beklentiniz aşağıdaki ifadelerden hangisine en yakındır?",
+      options: [
+        { label: "Ana param hiç erimesin; mevduat/TLREF civarı düzenli getiri yeterlidir", points: 1 },
+        { label: "Düşük oynaklıkla enflasyonun (TÜFE) biraz üzerinde dengeli getiri", points: 4 },
+        { label: "Orta-yüksek dalgalanmayı kabul ederim; BIST 100 / Altın üzeri getiri hedeflerim", points: 6 },
+        { label: "Yüksek volatiliteyi (6/7 - 7/7) üstlenirim; maksimum reel getiri/Alfa ararım", points: 7 },
+      ],
+    },
+    {
+      id: "q4",
+      question: "4. Sermaye piyasası araçları (TEFAS, Hisse, VIOP, Yabancı ETF) konusundaki deneyiminiz nedir?",
+      options: [
+        { label: "Sadece vadeli mevduat ve para piyasası fonu kullandım", points: 2 },
+        { label: "Altın, döviz ve borçlanma araçları fonlarında işlem yaptım", points: 4 },
+        { label: "Hisse senedi, değişken fon ve sepet çeşitlendirmesi konusunda bilgiliyim", points: 6 },
+        { label: "İzahname, R², Sharpe ve türev/yabancı hisse fonlarını aktif analiz ederim", points: 7 },
+      ],
+    },
+    {
+      id: "q5",
+      question: "5. Aylık toplam gelirinizin ne kadarını yüksek dalgalanma gösterebilecek yatırım araçlarına ayırabilirsiniz?",
+      options: [
+        { label: "%0 - %5 (Gelirimin neredeyse tamamı sabit giderlere ayrılıyor)", points: 1 },
+        { label: "%5 - %15 (Küçük bir tasarruf payım var)", points: 3 },
+        { label: "%15 - %30 (Düzenli tasarruf kapasitem ve acil durum fonum mevcut)", points: 5 },
+        { label: "%30 ve üzeri (Yüksek tasarruf oranım ve uzun vadeli risk kapasitem var)", points: 7 },
+      ],
+    },
+  ];
+
+  const spkProfileDetails =
+    spkRiskScore <= 2
+      ? {
+          title: `Skorunuz: ${spkRiskScore}/7 - Muhafazakâr / Düşük Riskli Yatırımcı`,
+          desc: "Ana para korumasını ve T+0 günlük likiditeyi ön planda tutuyorsunuz. Sert fiyat dalgalanmalarına karşı toleransınız düşük.",
+          suitableTypes: [
+            "Para Piyasası Şemsiye Fonları (Risk: 1/7 - Örn: TI1, PPN)",
+            "Kısa Vadeli Borçlanma Araçları ve Kira Sertifikası Fonları (Risk: 1/7 - 2/7)",
+          ],
+          sampleFunds: [
+            { code: "TI1", name: "İş Portföy Para Piyasası Fonu", risk: "1/7", valor: "T+0" },
+          ],
+        }
+      : spkRiskScore <= 4
+      ? {
+          title: `Skorunuz: ${spkRiskScore}/7 - Dengeli / Orta Risk Toleranslı Yatırımcı`,
+          desc: "Enflasyon (TÜFE) üzerinde reel getiri hedeflerken portföyünüzde aşırı sarsıntılardan kaçınmak istiyorsunuz.",
+          suitableTypes: [
+            "Değişken ve Dengeli Şemsiye Fonlar (Risk: 3/7 - 4/7 - Örn: IPB)",
+            "Fon Sepeti ve Borçlanma Araçları Fonları (Risk: 3/7 - 4/7)",
+            "Para Piyasası + Altın / Değişken Karma Sepetler",
+          ],
+          sampleFunds: [
+            { code: "IPB", name: "İstanbul Portföy Birinci Değişken Fon", risk: "4/7", valor: "T+1" },
+            { code: "TI1", name: "İş Portföy Para Piyasası Fonu", risk: "1/7", valor: "T+0" },
+          ],
+        }
+      : spkRiskScore === 5
+      ? {
+          title: `Skorunuz: 5/7 - Dengeli / Büyüme Odaklı Yatırımcı`,
+          desc: "Orta ve uzun vadede reel sermaye büyümesi için hisse senedi, altın ve değişken fonların kontrollü oynaklığını kabul ediyorsunuz.",
+          suitableTypes: [
+            "Değişken Fonlar ve Aktif Varlık Dağılımlı Fonlar (Risk: 4/7 - 5/7 - Örn: IPB)",
+            "Kıymetli Madenler / Altın Fonları (Risk: 5/7 - 6/7 - Örn: TTA)",
+            "Çeşitlendirilmiş Sepetler (Para Piyasası + Altın + Hisse)",
+          ],
+          sampleFunds: [
+            { code: "IPB", name: "İstanbul Portföy Birinci Değişken Fon", risk: "4/7", valor: "T+1" },
+            { code: "TTA", name: "İş Portföy Altın Fonu", risk: "6/7", valor: "T+1" },
+            { code: "MAC", name: "Marmara Capital Hisse Senedi Yoğun Fon", risk: "6/7", valor: "T+2" },
+          ],
+        }
+      : {
+          title: `Skorunuz: ${spkRiskScore}/7 - Dinamik / Büyüme ve Alfa Odaklı Yatırımcı`,
+          desc: "Kısa vadeli %15+ piyasa düzeltmelerinde panik satışı yapmadan uzun vadeli bileşik reel getiri ve pozitif Jensen Alfası (α) hedefliyorsunuz.",
+          suitableTypes: [
+            "Hisse Senedi Yoğun Fonlar (%0 Stopaj Avantajlı - Risk: 6/7 - Örn: MAC)",
+            "Yabancı Teknoloji ve Küresel Hisse Senedi Fonları (Risk: 6/7 - 7/7 - Örn: AFT)",
+            "Kıymetli Madenler / Altın ve Tematik Değişken Fonlar (Örn: TTA, IPB)",
+          ],
+          sampleFunds: [
+            { code: "AFT", name: "Ak Portföy Yeni Teknolojiler Yabancı Hisse Fonu", risk: "6/7", valor: "T+3" },
+            { code: "MAC", name: "Marmara Capital Hisse Senedi Yoğun Fon", risk: "6/7", valor: "T+2" },
+            { code: "TTA", name: "İş Portföy Altın Fonu", risk: "6/7", valor: "T+1" },
+          ],
+        };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       {/* Görünmez Honeypot Bot Koruması */}
@@ -458,7 +608,229 @@ export default function SurveyPage() {
         </label>
       </div>
 
-      {alreadyParticipatedMsg && (
+      {/* ÜST 2 BÖLÜMLÜ SEKME YAPISI */}
+      <div className="p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-2 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveTab("tubitak_survey")}
+          className={`p-3.5 rounded-xl text-left transition-all flex items-center gap-3 ${
+            activeTab === "tubitak_survey"
+              ? "bg-blue-600 text-white shadow-md"
+              : "bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+          }`}
+        >
+          <GraduationCap className="w-5 h-5 shrink-0" />
+          <div>
+            <div className="text-[11px] font-bold opacity-85">1. Bölüm / Sekme</div>
+            <div className="text-xs sm:text-sm font-extrabold">
+              TÜBİTAK 2209-A Finansal Okuryazarlık ve Fon Şeffaflık Algı Anketi
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("spk_risk_test")}
+          className={`p-3.5 rounded-xl text-left transition-all flex items-center gap-3 ${
+            activeTab === "spk_risk_test"
+              ? "bg-teal-600 text-white shadow-md"
+              : "bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
+          }`}
+        >
+          <ShieldCheck className="w-5 h-5 shrink-0" />
+          <div>
+            <div className="text-[11px] font-bold opacity-85">2. Bölüm / Sekme</div>
+            <div className="text-xs sm:text-sm font-extrabold">
+              🛡️ SPK Kişisel Risk Profili ve Yatırımcı Uygunluk Testi (1-7 Ölçeği)
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* 2. BÖLÜM / SEKME: SPK KİŞİSEL RİSK PROFİLİ VE YATIRIMCI UYGUNLUK TESTİ */}
+      {activeTab === "spk_risk_test" && (
+        <div className="space-y-6">
+          <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 text-xs font-bold">
+                  <ShieldCheck className="w-4 h-4" />
+                  SPK Yatırım Hizmetleri Tebliği • 1-7 Ölçeği Uygunluk Simülasyonu
+                </div>
+                <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">
+                  🛡️ SPK Kişisel Risk Profili ve Yatırımcı Uygunluk Testi
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                  Aşağıdaki 5 soruyu yanıtlayarak 1 (En Düşük Risk) ile 7 (En Yüksek Risk) arasındaki kişisel SPK risk profilinizi belirleyin. Belirlediğiniz skor otomatik olarak kaydedilir ve tüm fon inceleme sayfalarında (<code>/transparency</code>, <code>/analytics</code>) size özel <strong>SPK Risk Uyumu Rozeti</strong> olarak gösterilir.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-center shrink-0">
+                <div className="text-[11px] font-bold text-teal-700 dark:text-teal-300">
+                  Mevcut Risk Skorunuz
+                </div>
+                <div className="text-2xl font-extrabold font-mono text-teal-700 dark:text-teal-300 mt-0.5">
+                  {spkRiskScore} / 7
+                </div>
+                <div className="flex items-center justify-center gap-1 mt-2">
+                  {[1, 2, 3, 4, 5, 6, 7].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => saveSpkRiskProfile(r)}
+                      className={`w-6 h-6 rounded-lg font-mono font-bold text-xs transition-all ${
+                        spkRiskScore === r
+                          ? "bg-teal-600 text-white shadow-sm scale-105"
+                          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {SPK_SUITABILITY_QUESTIONS.map((q) => (
+                <div
+                  key={q.id}
+                  className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 space-y-3"
+                >
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                    {q.question}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {q.options.map((opt) => {
+                      const active = spkAnswers[q.id] === opt.points;
+                      return (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() =>
+                            setSpkAnswers((prev) => ({ ...prev, [q.id]: opt.points }))
+                          }
+                          className={`p-3 rounded-xl border text-left text-xs font-medium transition-all flex items-start gap-2.5 ${
+                            active
+                              ? "border-teal-600 bg-teal-50 dark:bg-teal-950/50 text-teal-950 dark:text-teal-200 font-bold ring-2 ring-teal-500/20"
+                              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-teal-400"
+                          }`}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-full border shrink-0 mt-0.5 flex items-center justify-center ${
+                              active
+                                ? "border-teal-600 bg-teal-600 text-white"
+                                : "border-slate-300 dark:border-slate-600"
+                            }`}
+                          >
+                            {active && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </div>
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={handleCalculateSpkQuiz}
+                className="px-6 py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-md inline-flex items-center gap-2 transition-all"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Risk Profilimi Hesapla ve Karnemi Oluştur
+              </button>
+            </div>
+          </div>
+
+          {/* KİŞİSEL SPK RİSK PROFİLİ KARNESİ */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-teal-700 to-emerald-800 text-white space-y-5 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-bold">
+                  <Award className="w-4 h-4" />
+                  Kişisel SPK Uygunluk &amp; Risk Karnesi (Tarayıcınıza Kaydedildi ✅)
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold">
+                  {spkProfileDetails.title}
+                </h2>
+                <p className="text-xs sm:text-sm text-teal-100 leading-relaxed max-w-2xl">
+                  {spkProfileDetails.desc}
+                </p>
+              </div>
+              <div className="p-4 rounded-2xl bg-white/15 border border-white/25 text-center shrink-0 min-w-[130px]">
+                <div className="text-[11px] font-semibold text-teal-100">SPK Risk Ölçeği</div>
+                <div className="text-4xl font-extrabold font-mono mt-0.5">
+                  {spkRiskScore}/7
+                </div>
+                <div className="text-[10px] text-teal-100 mt-1">
+                  {spkQuizCompleted ? "Kayıtlı Profil" : "Varsayılan Profil"}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="p-4 rounded-2xl bg-white/10 border border-white/15 space-y-2">
+                <div className="text-xs font-extrabold uppercase tracking-wider text-teal-200">
+                  📌 Size Uygun SPK Fon Şemsiye Türleri
+                </div>
+                <ul className="space-y-1.5 text-xs text-white">
+                  {spkProfileDetails.suitableTypes.map((t) => (
+                    <li key={t} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0 mt-0.5" />
+                      <span>{t}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/10 border border-white/15 space-y-2">
+                <div className="text-xs font-extrabold uppercase tracking-wider text-teal-200">
+                  🔍 Profilinize Uygun Örnek TEFAS Fonları
+                </div>
+                <div className="space-y-2">
+                  {spkProfileDetails.sampleFunds.map((f) => (
+                    <div
+                      key={f.code}
+                      className="p-2.5 rounded-xl bg-white/10 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="font-extrabold text-amber-300 mr-1.5">[{f.code}]</span>
+                        <span className="font-semibold">{f.name}</span>
+                      </div>
+                      <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-white/20">
+                        Risk: {f.risk} • {f.valor}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-wrap gap-3">
+              <Link
+                href="/transparency"
+                className="px-4 py-2.5 rounded-xl bg-white text-teal-900 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-sm hover:bg-teal-50"
+              >
+                Şeffaflık &amp; Fon Karnelerinde Uyumumu Gör
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/analytics"
+                className="px-4 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs inline-flex items-center gap-1.5"
+              >
+                Fiyat &amp; Risk Analizine Git
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "tubitak_survey" && alreadyParticipatedMsg && (
         <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs sm:text-sm text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-2.5">
           <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
           <span>{alreadyParticipatedMsg}</span>
@@ -466,7 +838,7 @@ export default function SurveyPage() {
       )}
 
       {/* 1. GİRİŞ (INTRO) EKRANI */}
-      {step === "intro" && (
+      {activeTab === "tubitak_survey" && step === "intro" && (
         <div className="p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-xs font-bold">
             <GraduationCap className="w-4 h-4" />
@@ -535,7 +907,7 @@ export default function SurveyPage() {
       )}
 
       {/* 2. DEMOGRAFİK BİLGİLER ADIMI */}
-      {step === "demographics" && (
+      {activeTab === "tubitak_survey" && step === "demographics" && (
         <div className="p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400">
@@ -638,7 +1010,7 @@ export default function SurveyPage() {
       )}
 
       {/* 3. SORULAR ADIMI */}
-      {step === "questions" && curQ && (
+      {activeTab === "tubitak_survey" && step === "questions" && curQ && (
         <div className="p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
           {/* İlerleme Çubuğu */}
           <div className="space-y-2">
@@ -733,7 +1105,7 @@ export default function SurveyPage() {
       )}
 
       {/* 4. SONUÇ & KARNE EKRANI */}
-      {step === "result" && result && (
+      {activeTab === "tubitak_survey" && step === "result" && result && (
         <div className="space-y-6">
           {/* Üst Başarı Kartı */}
           <div className="p-8 rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white space-y-6 shadow-xl relative overflow-hidden">

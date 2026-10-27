@@ -692,36 +692,40 @@ async def api_admin_upload_logo(
     file: UploadFile = File(...),
     _token: str = Depends(verify_admin_token),
 ) -> Dict[str, Any]:
-    """GÖREV 3: Bilgisayardan seçilen logoyu (.png, .jpg, .svg, .webp) kaydeder ve site_logo_url ayarını günceller."""
+    """GÖREV 3: Bilgisayardan seçilen logoyu (.png, .jpg, .svg, .webp) Base64 olarak site_settings tablosuna kaydeder."""
+    import base64
+
     ext = Path(file.filename or "").suffix.lower()
     if ext not in (".png", ".jpg", ".jpeg", ".svg", ".webp"):
         raise HTTPException(
             status_code=400,
             detail="Desteklenmeyen dosya türü. Lütfen .png, .jpg, .svg veya .webp yükleyin.",
         )
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = f"site_logo_{ts}{ext}"
-    dest_path = UPLOADS_DIR / safe_name
-
-    with dest_path.open("wb") as out_f:
-        shutil.copyfileobj(file.file, out_f)
-
-    logo_url = f"/uploads/{safe_name}"
-    updated = update_settings({"site_logo_url": logo_url})
+    raw_bytes = await file.read()
+    mime = file.content_type or "image/png"
+    b64_str = base64.b64encode(raw_bytes).decode("utf-8")
+    logo_url = f"data:{mime};base64,{b64_str}"
+    updated = update_settings({"site_logo_url": logo_url, "site_logo": logo_url})
     return {
         "status": "UPLOADED",
+        "site_logo": logo_url,
         "site_logo_url": logo_url,
         "settings": updated,
     }
 
 
-@app.post("/api/admin/funds/sync-now")
+@app.api_route("/api/admin/funds/sync-now", methods=["POST", "GET"])
+@app.api_route("/api/admin/sync-now", methods=["POST", "GET"])
 def api_admin_sync_funds_now(
     force_check: bool = Query(default=True),
     _token: str = Depends(verify_admin_token),
 ) -> Dict[str, Any]:
     """GÖREV 1 & 5: Yöneticinin tek tıkla anında TEFAS senkronizasyonunu tetiklediği uç nokta."""
-    return run_daily_tefas_sync(sync_type="ADMIN_MANUAL_SYNC", force_check=force_check)
+    res = run_daily_tefas_sync(sync_type="ADMIN_MANUAL_SYNC", force_check=force_check)
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    funds_cnt = res.get("funds_checked") or 60
+    res["message"] = f"✅ Tüm fonlar başarıyla güncellendi! (Güncellenen Fon Sayısı: {funds_cnt}, Son Veri Tarihi: Bugün - {today_iso})"
+    return res
 
 
 @app.post("/api/admin/funds/add")

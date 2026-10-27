@@ -16,6 +16,13 @@ import { apiFetch, getTelemetrySessionId } from "@/lib/api";
 export default function FloatingQuickPoll() {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [manualClosed, setManualClosed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [widgetConfig, setWidgetConfig] = useState({
+    enabled: true,
+    openSec: 8,
+    waitSec: 25,
+  });
   const [pollData, setPollData] = useState<any>({
     question_id: 3,
     question_text:
@@ -43,25 +50,93 @@ export default function FloatingQuickPoll() {
   const [hasVoted, setHasVoted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const loadSettings = () => {
+    apiFetch<any>("/api/public/settings")
+      .then((res) => {
+        if (res) {
+          setWidgetConfig({
+            enabled: res.quick_poll_enabled !== false,
+            openSec: Math.max(2, Number(res.quick_poll_open_sec || 8)),
+            waitSec: Math.max(5, Number(res.quick_poll_wait_sec || 25)),
+          });
+        }
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
+    let alreadyVoted = false;
+    let alreadyDismissed = false;
     if (typeof window !== "undefined") {
       const savedVote = localStorage.getItem("quick_poll_voted_3");
       if (savedVote !== null) {
+        alreadyVoted = true;
         setHasVoted(true);
         setSelectedIdx(Number(savedVote));
       }
       const isDismissed = sessionStorage.getItem("quick_poll_dismissed");
       if (isDismissed === "true") {
+        alreadyDismissed = true;
         setDismissed(true);
       }
     }
+
+    loadSettings();
+    const onBrandingUpdate = () => loadSettings();
+    window.addEventListener("branding-updated", onBrandingUpdate);
 
     apiFetch<any>("/api/survey/quick-poll")
       .then((res) => {
         if (res?.question_text) setPollData(res);
       })
       .catch(() => {});
+
+    // İlk yüklemede (kullanıcı oy vermediyse ve kapatmadıysa) 2 saniye sonra yumuşak animasyonla aç
+    let initTimer: any = null;
+    if (!alreadyVoted && !alreadyDismissed) {
+      initTimer = setTimeout(() => {
+        setOpen(true);
+      }, 2000);
+    }
+
+    return () => {
+      window.removeEventListener("branding-updated", onBrandingUpdate);
+      if (initTimer) clearTimeout(initTimer);
+    };
   }, []);
+
+  // Otomatik Açılma / Küçülme Döngüsü (Admin süre ayarlarına göre, hover durumunda duraklar)
+  useEffect(() => {
+    if (!widgetConfig.enabled || dismissed || manualClosed || hasVoted || isHovered) {
+      return;
+    }
+
+    let timer: any = null;
+    if (open) {
+      // Açık kalma süresi sonunda otomatik küçült
+      timer = setTimeout(() => {
+        setOpen(false);
+      }, widgetConfig.openSec * 1000);
+    } else {
+      // Kapandıktan sonra bekleme süresi sonunda tekrar aç
+      timer = setTimeout(() => {
+        setOpen(true);
+      }, widgetConfig.waitSec * 1000);
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    open,
+    widgetConfig.enabled,
+    widgetConfig.openSec,
+    widgetConfig.waitSec,
+    dismissed,
+    manualClosed,
+    hasVoted,
+    isHovered,
+  ]);
 
   const handleVote = async () => {
     if (selectedIdx === null) return;
@@ -95,16 +170,39 @@ export default function FloatingQuickPoll() {
     }
   };
 
-  if (dismissed) return null;
+  if (!widgetConfig.enabled || dismissed) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-40">
+    <div
+      className="fixed bottom-5 right-5 z-40"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <style jsx>{`
+        @keyframes quickPollSlideUp {
+          0% {
+            opacity: 0;
+            transform: translateY(24px) scale(0.96);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .quick-poll-card-anim {
+          animation: quickPollSlideUp 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+      `}</style>
+
       {/* Kapalı Hal: Küçük Şık Buton */}
       {!open && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
-          className="group px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-lg hover:shadow-xl inline-flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
+          onClick={() => {
+            setOpen(true);
+            setManualClosed(false);
+          }}
+          className="group px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-lg hover:shadow-xl inline-flex items-center gap-2 transition-all duration-300 transform hover:-translate-y-0.5 ring-4 ring-blue-500/20"
         >
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
@@ -117,16 +215,28 @@ export default function FloatingQuickPoll() {
 
       {/* Açık Hal: İnteraktif Mini Soru Kartı */}
       {open && (
-        <div className="w-[340px] sm:w-[380px] p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="quick-poll-card-anim w-[340px] sm:w-[380px] p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold">
+              <span className="relative flex h-2 w-2 mr-0.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600" />
+              </span>
               <GraduationCap className="w-3.5 h-3.5" />
               TÜBİTAK 2209-A Hızlı Soru
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              {!hasVoted && !manualClosed && (
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {isHovered ? "Duraklatıldı" : `${widgetConfig.openSec} sn`}
+                </span>
+              )}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                  setManualClosed(true);
+                }}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
                 title="Simge durumuna küçült"
               >
