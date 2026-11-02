@@ -15,12 +15,16 @@ import { API_BASE_URL, apiFetch, formatNumberTR } from "@/lib/api";
 import SvgLineChart from "@/components/SvgLineChart";
 import RealReturnSimulator from "@/components/RealReturnSimulator";
 import {
+  AcademicFundWizard,
   AcademicPdfReportButton,
   BehavioralFinanceSimulator,
   ClosetIndexingDetective,
   HistoricalStressTestLab,
+  MonthlyReturnsHeatmap,
   SpkRiskProfileMatcher,
   StyleDriftRadar,
+  UnderwaterDrawdownChart,
+  WhaleLiquidityRadar,
 } from "@/components/AcademicModules";
 
 const PALETTE = [
@@ -122,8 +126,25 @@ export default function AnalyticsPage() {
         setAvailableFunds(res.funds);
       }
     });
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const qFund = (sp.get("fund") || "").trim().toUpperCase();
+      if (qFund) {
+        const nextCodes = Array.from(new Set([qFund, "AFT", "MAC", "TTA", "TI1"]));
+        setSelectedCodes(nextCodes);
+        runComparison(nextCodes);
+        return;
+      }
+    }
     runComparison();
   }, []);
+
+  const handleWizardSelectFund = (code: string) => {
+    const clean = code.trim().toUpperCase();
+    const nextCodes = [clean, ...selectedCodes.filter((c) => c !== clean)].slice(0, 6);
+    setSelectedCodes(nextCodes);
+    runComparison(nextCodes);
+  };
 
   const toggleFund = (code: string) => {
     if (selectedCodes.includes(code)) {
@@ -198,6 +219,9 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
+      {/* YENİ MODÜL 5: 🧭 30 Saniyede Akademik Fon Seçim Sihirbazı */}
+      <AcademicFundWizard onSelectFundForAnalytics={handleWizardSelectFund} />
+
       {/* Başlık ve Filtre Paneli */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -589,6 +613,24 @@ export default function AnalyticsPage() {
             defaultAmount={100000}
             fundsSummary={data.funds_summary}
             dailySeries={data.daily_series}
+          />
+
+          {/* YENİ MODÜL 3: 🌊 Su Altında Kalma (Underwater Drawdown) ve Sabır Testi Grafiği */}
+          <UnderwaterDrawdownChart
+            fundCodes={selectedCodes}
+            dailySeries={data.daily_series}
+          />
+
+          {/* YENİ MODÜL 4: 🗓️ Aylık Getiri Isı Haritası (Monthly Returns Heatmap) & Kazanma Oranı */}
+          <MonthlyReturnsHeatmap
+            fundCodes={selectedCodes}
+            fundsSummary={data.funds_summary}
+          />
+
+          {/* YENİ MODÜL 1: 🐋 Sıcak Para & Balina Çıkışı Likidite Şoku Radarı */}
+          <WhaleLiquidityRadar
+            fundCodes={selectedCodes}
+            fundsSummary={data.funds_summary}
           />
 
           {/* MODÜL 7: SPK Uygunluk Testi Simülatörü (Kişisel Risk Profili 1-7 vs. Fon Risk Değeri Eşleştirici) */}

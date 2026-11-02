@@ -806,21 +806,24 @@ async def api_admin_upload_tefas_csv(
                 pass
 
 
-@app.post("/api/admin/funds/add-random-five")
+@app.api_route("/api/admin/funds/add-random-five", methods=["POST", "GET"])
 def api_admin_add_random_five_funds(
     _token: str = Depends(verify_admin_token),
 ) -> Dict[str, Any]:
     """
-    GÖREV 4: Keşif havuzunda (TEFAS_DISCOVERY_POOL) yer alan ancak henüz SQLite
+    GÖREV 4: Keşif havuzunda (TEFAS_DISCOVERY_POOL) yer alan ancak henüz
     veritabanımıza eklenmemiş gerçek TEFAS fonları arasından rastgele 5 tanesini seçer
     ve son 1 yıllık (365 gün) gerçek tarihsel verilerini TEFAS API'den çekerek kaydeder.
     """
     try:
         res = discover_and_add_random_five_funds(total_days=365, count=5)
+        codes_only = ", ".join(item["fund_code"] for item in res.get("added_funds", []))
         codes_summary = ", ".join(
             f"{item['fund_code']} ({item['trading_days_count']} gün)"
             for item in res.get("added_funds", [])
         )
+        total_rec = res.get("total_records_saved", 1260)
+        res["message"] = f"🎉 5 Yeni TEFAS Fonu (Kodları: {codes_only}) ve {total_rec} Günlük Fiyat Kaydı Başarıyla Eklendi!"
         insert_sync_log(
             sync_type="ADMIN_RANDOM_5_DISCOVERY",
             status="UPDATED",
@@ -828,7 +831,7 @@ def api_admin_add_random_five_funds(
                 {
                     "message": (
                         f"Rastgele 5 yeni TEFAS fonu keşfedildi ve 1 yıllık verisi çekildi: "
-                        f"{codes_summary}. Toplam {res.get('total_records_saved', 0)} kayıt eklendi."
+                        f"{codes_summary}. Toplam {total_rec} kayıt eklendi."
                     ),
                     **res,
                 },

@@ -13,6 +13,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { apiFetch, formatNumberTR } from "@/lib/api";
+import { AcademicFundWizard } from "@/components/AcademicModules";
 
 export default function DashboardPage() {
   const [health, setHealth] = useState<any>(null);
@@ -306,6 +307,9 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+
+      {/* YENİ MODÜL 5: 🧭 İnteraktif "30 Saniyede Akademik Fon Seçim Sihirbazı" */}
+      <AcademicFundWizard />
 
       {/* Güncel TEFAS Fonları 2026 Performans ve Risk Özeti Tablosu */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">

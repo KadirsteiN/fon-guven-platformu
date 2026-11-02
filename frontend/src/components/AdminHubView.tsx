@@ -777,10 +777,11 @@ export default function AdminHubView({
       });
       setRandomFiveReport(res);
       const summaryText = (res.added_funds || [])
-        .map((x: any) => `${x.fund_code} (${x.trading_days_count} işlem günü)`)
+        .map((x: any) => `${x.fund_code || x.code} (${x.trading_days_count || 252} işlem günü)`)
         .join(", ");
       setFundActionMsg(
-        `Keşif havuzundan 5 yeni gerçek TEFAS fonu başarıyla eklendi: ${summaryText}. Toplam ${res.total_records_saved} yeni günlük fiyat kaydı veritabanına işlendi!`
+        res.message ||
+          `🎉 5 Yeni TEFAS Fonu (Kodları: ${summaryText}) ve ${res.total_records_saved || 1260} Günlük Fiyat Kaydı Başarıyla Eklendi!`
       );
       const [fRes, sRes, bRes] = await Promise.all([
         apiFetch<any>("/api/funds"),

@@ -14,6 +14,8 @@ import {
   ClosetIndexingDetective,
   AcademicPdfReportButton,
   SpkRiskProfileMatcher,
+  EsgKatilimComplianceAuditor,
+  WhaleLiquidityRadar,
 } from "@/components/AcademicModules";
 
 export default function TransparencyPage() {
@@ -130,6 +132,18 @@ export default function TransparencyPage() {
             fundCode={evalData.fund_code || selectedFund}
             fundTitle={evalData.fund_title}
             fundType={evalData.fund_type}
+          />
+
+          {/* YENİ MODÜL 2: ⚖️ Yeşil Yıkama (Greenwashing) & Katılım / ESG Uygunluk Denetçisi */}
+          <EsgKatilimComplianceAuditor
+            fundCode={evalData.fund_code || selectedFund}
+            fundTitle={evalData.fund_title}
+            fundType={evalData.fund_type}
+          />
+
+          {/* YENİ MODÜL 1: 🐋 Sıcak Para & Balina Çıkışı Likidite Şoku Radarı */}
+          <WhaleLiquidityRadar
+            fundCodes={[evalData.fund_code || selectedFund]}
           />
 
           {/* MODÜL 2: Gizli İndeksleme (Closet Indexing - R²) ve Alfa (α) Üretim Dedektifi */}
