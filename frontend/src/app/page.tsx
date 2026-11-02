@@ -42,6 +42,7 @@ function LandingAndDashboardContent() {
   const [revealedSections, setRevealedSections] = useState<Record<string, boolean>>({
     steps: true,
     bento: true,
+    unique10: true,
     stats: true,
     cta: true,
   });
@@ -266,6 +267,12 @@ function LandingAndDashboardContent() {
                 className="hover:text-white transition-colors"
               >
                 3 Adımda Kullanım
+              </a>
+              <a
+                href="#unique-academic-tech"
+                className="hover:text-amber-300 text-emerald-300 font-bold transition-colors"
+              >
+                💎 10 Benzersiz Teknoloji
               </a>
               <a
                 href="#bento-labs"
@@ -560,6 +567,427 @@ function LandingAndDashboardContent() {
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* BÖLÜM B-2 — "💎 Türkiye'de İlk: Klasik Finans Sitelerinde Bulamayacağınız Akademik Teknolojilerimiz" (10 Benzersiz Özellik Vitrini) */}
+          <section
+            id="unique-academic-tech"
+            data-reveal-id="unique10"
+            className={`scroll-mt-24 space-y-10 transition-all duration-700 ${
+              revealedSections.unique10
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-8"
+            }`}
+          >
+            <div className="relative p-6 sm:p-10 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950/60 to-slate-950 border border-blue-500/30 shadow-2xl shadow-blue-900/20 overflow-hidden">
+              {/* Glow Efektleri */}
+              <div className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-blue-500/15 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-emerald-500/15 blur-3xl" />
+
+              <div className="relative z-10 text-center max-w-4xl mx-auto space-y-3 mb-10">
+                <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-xs sm:text-sm font-extrabold text-amber-300 shadow-lg">
+                  ✨ Başka Hiçbir Yerde Olmayan Benzersiz Özelliklerimiz • 10 Akademik İnovasyon
+                </span>
+                <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight">
+                  💎 Türkiye&apos;de İlk: Klasik Finans Sitelerinde Bulamayacağınız Akademik Teknolojilerimiz
+                </h2>
+                <p className="text-xs sm:text-base text-slate-300 max-w-3xl mx-auto leading-relaxed">
+                  Standart finans portalları yalnızca geçmiş yüzdesel getiriyi gösterir. TÜBİTAK 2209-A araştırma altyapımız ise fonların{" "}
+                  <strong className="text-emerald-300">su altında kalma süresini, balina çıkışlarını, gizli indekslemeyi, bülten sapmalarını ve reel erimeyi</strong>{" "}
+                  matematiksel kanıtlarla ortaya koyar.
+                </p>
+              </div>
+
+              {/* 10 Benzersiz Akademik Özellik Bento Grid */}
+              <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 1. Underwater (Su Altında Kalma) & Yatırımcı Sabır Testi Grafiği */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-rose-950/60 via-slate-900/95 to-slate-950 border border-rose-500/30 hover:border-rose-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/40 text-[11px] font-extrabold text-rose-300">
+                        ÖZELLİK #01 • DRAWDOWN &amp; SABIR TESTİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-rose-400">MDD &amp; Recovery</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-rose-200 transition-colors">
+                      🌊 1. Underwater (Su Altında Kalma) &amp; Yatırımcı Sabır Testi Grafiği
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Sadece fonun ne kadar kazandırdığına değil, zirvesinden düştükten sonra yatırımcıyı kaç iş günü zararda (su altında) beklettiğine ve maksimum düşüş derinliğine (Max Drawdown) bakın.
+                    </p>
+                    {/* Kırmızı Mini Su Altı Dalga (Underwater Wave) İllüstrasyonu */}
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-rose-500/25 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-rose-300">
+                        <span>Zirve (0,0%) Hizası</span>
+                        <span>En Uzun Su Altı: 38 İş Günü • MDD: -%14,2</span>
+                      </div>
+                      <svg viewBox="0 0 320 54" className="w-full h-12 overflow-visible">
+                        <defs>
+                          <linearGradient id="landingUnderwaterGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.55" />
+                            <stop offset="100%" stopColor="#881337" stopOpacity="0.1" />
+                          </linearGradient>
+                        </defs>
+                        <line x1="0" y1="6" x2="320" y2="6" stroke="#fb7185" strokeDasharray="3 3" strokeWidth="1" />
+                        <path
+                          d="M0,6 L25,6 L50,22 L80,44 L115,34 L145,48 L180,20 L205,6 L235,6 L265,30 L295,14 L320,6 Z"
+                          fill="url(#landingUnderwaterGrad)"
+                        />
+                        <path
+                          d="M0,6 L25,6 L50,22 L80,44 L115,34 L145,48 L180,20 L205,6 L235,6 L265,30 L295,14 L320,6"
+                          fill="none"
+                          stroke="#f43f5e"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Gerçek TEFAS Zirve-Dip Serisi</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/analytics?tab=RISK_UNDERWATER")}
+                      className="px-4 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Balina Çıkışı ve Sıcak Para (Likidite Şoku) Radarı */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-cyan-950/60 via-slate-900/95 to-slate-950 border border-cyan-500/30 hover:border-cyan-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-[11px] font-extrabold text-cyan-300">
+                        ÖZELLİK #02 • KURUMSAL LİKİDİTE RADARI
+                      </span>
+                      <span className="text-xs font-mono font-bold text-cyan-400">Whale Radar</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-cyan-200 transition-colors">
+                      🐋 2. Balina Çıkışı ve Sıcak Para (Likidite Şoku) Radarı
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Yatırımcı sayısı sabitken fon toplam değerindeki ani erimeleri yakalayın. Büyük kurumsal yatırımcıların (balinaların) fondan çıkış yapıp yapmadığını ve kişi başı ortalama portföy büyüklüğünü anlık izleyin.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-cyan-500/25 grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 rounded-xl bg-white/5">
+                        <div className="text-[10px] text-slate-400">Kişi Başı Portföy</div>
+                        <div className="text-xs font-extrabold font-mono text-cyan-300">₺184.500</div>
+                      </div>
+                      <div className="p-2 rounded-xl bg-white/5">
+                        <div className="text-[10px] text-slate-400">30G Net Nakit Akışı</div>
+                        <div className="text-xs font-extrabold font-mono text-emerald-400">+%6,8 Giriş</div>
+                      </div>
+                      <div className="p-2 rounded-xl bg-white/5">
+                        <div className="text-[10px] text-slate-400">Balina Sinyali</div>
+                        <div className="text-xs font-extrabold text-emerald-300">Stabil 🐋</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Fon Toplam Değer / Yatırımcı Sayısı Analizi</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/analytics?tab=AUDIT_RADAR")}
+                      className="px-4 py-2 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Gizli İndeksleme (Closet Indexing - R²) ve Alfa (α) Dedektifi */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-indigo-950/60 via-slate-900/95 to-slate-950 border border-indigo-500/30 hover:border-indigo-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-[11px] font-extrabold text-indigo-300">
+                        ÖZELLİK #03 • AKTİF YÖNETİM TESTİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-indigo-400">R² &amp; Jensen α</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-indigo-200 transition-colors">
+                      🕵️‍♂️ 3. Gizli İndeksleme (Closet Indexing - R²) ve Alfa (α) Dedektifi
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Fon yöneticisi gerçekten aktif yönetim mi yapıyor, yoksa BIST 100 endeksini birebir kopyalayıp (R² &gt; 0.92) sizden boşuna mı yüksek yönetim ücreti kesiyor? Jensen Alfası ile test edin.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-indigo-500/25 flex items-center justify-between gap-3 text-xs">
+                      <div>
+                        <div className="text-[10px] text-slate-400">BIST-100 Determinasyon (R²)</div>
+                        <div className="font-mono font-extrabold text-indigo-300">R² = 0,48 (Gerçek Aktif Yönetim)</div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-mono font-bold text-[11px]">
+                        Jensen α: +%4,12
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Yıllık Yönetim Ücreti Haklılık Denetimi</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/analytics?tab=AUDIT_RADAR")}
+                      className="px-4 py-2 rounded-xl bg-indigo-600/90 hover:bg-indigo-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Bülten Vaadi vs. Fiili Portföy Sapma Denetçisi (Style Drift) */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-blue-950/60 via-slate-900/95 to-slate-950 border border-blue-500/30 hover:border-blue-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/40 text-[11px] font-extrabold text-blue-300">
+                        ÖZELLİK #04 • İZAHNAME SADAKATİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-blue-400">Style Drift</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-blue-200 transition-colors">
+                      🔍 4. Bülten Vaadi vs. Fiili Portföy Sapma Denetçisi (Style Drift)
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Fonun izahnamesinde ve aylık bülteninde söz verdiği hedef varlık dağılımı ile TEFAS&apos;taki gerçek dağılımını yan yana kıyaslayın; stil kaymalarını (Style Drift) tek tıkla yakalayın.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-blue-500/25 space-y-2 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-semibold">Hisse Senedi Vaadi: %80</span>
+                        <span className="text-emerald-300 font-mono font-bold">Fiili TEFAS: %82,4 (Uyumlu ✅)</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden flex">
+                        <div className="bg-blue-500 h-full" style={{ width: "82%" }} />
+                        <div className="bg-emerald-400 h-full" style={{ width: "18%" }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">KAP İzahname vs. Canlı TEFAS Dağılımı</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/transparency?tab=STYLE_DRIFT")}
+                      className="px-4 py-2 rounded-xl bg-blue-600/90 hover:bg-blue-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Katılım (Faizsiz) & ESG "Yeşil Yıkama (Greenwashing)" Denetçisi */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-emerald-950/60 via-slate-900/95 to-slate-950 border border-emerald-500/30 hover:border-emerald-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-[11px] font-extrabold text-emerald-300">
+                        ÖZELLİK #05 • %0 FAİZ TOLERANS DENETİMİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-emerald-400">Katılım &amp; ESG</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-emerald-200 transition-colors">
+                      ⚖️ 5. Katılım (Faizsiz) &amp; ESG &ldquo;Yeşil Yıkama (Greenwashing)&rdquo; Denetçisi
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Katılım veya Sürdürülebilirlik unvanlı fonların portföyünde gizli kalmış faizli mevduat, ters repo veya uyumsuz enstrüman olup olmadığını %0 tolerans ilkesiyle denetleyin.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-emerald-500/25 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-300">Ters Repo / Vadeli Mevduat / Tahvil: <strong className="text-emerald-400 font-mono">%0,00</strong></span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
+                        %100 Katılım Uyumlu ✅
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Danışma Kurulu &amp; ESG Kriter Kontrolü</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/transparency?tab=KATILIM_ESG")}
+                      className="px-4 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 6. Fisher Denklemi ile Net Reel Getiri & 10 Yıllık Kesinti Erimesi */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-amber-950/60 via-slate-900/95 to-slate-950 border border-amber-500/30 hover:border-amber-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-[11px] font-extrabold text-amber-300">
+                        ÖZELLİK #06 • GERÇEK ALIM GÜCÜ &amp; TGO ERİMESİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-amber-400">Fisher (1930)</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-amber-200 transition-colors">
+                      💰 6. Fisher Denklemi ile Net Reel Getiri &amp; 10 Yıllık Kesinti Erimesi
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Yönetim ücreti, stopaj ve TÜİK enflasyonu (TÜFE) düşüldükten sonra cebinizde kalan gerçek alım gücünü Fisher denklemiyle hesaplayın; %3 yönetim ücretinin 10 yılda servetinizin ne kadarını erittiğini görün.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-amber-500/25 flex items-center justify-between gap-2 text-[11px] font-mono">
+                      <span className="text-amber-300">1 + r_reel = (1 + r_net) / (1 + π_TÜFE)</span>
+                      <span className="text-rose-400 font-bold">10Y Kesinti Kaybı: -%26,3</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Enflasyon, Stopaj &amp; Yönetim Ücreti Simülatörü</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/analytics?tab=REAL_RETURN")}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 7. Davranışsal Finans: Panik Satışı vs. Düzenli Birikim (DCA) Laboratuvarı */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-950/60 via-slate-900/95 to-slate-950 border border-purple-500/30 hover:border-purple-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-[11px] font-extrabold text-purple-300">
+                        ÖZELLİK #07 • YATIRIMCI PSİKOLOJİSİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-purple-400">Panic vs. DCA</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-purple-200 transition-colors">
+                      🧠 7. Davranışsal Finans: Panik Satışı vs. Düzenli Birikim (DCA) Laboratuvarı
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Piyasa düştüğünde korkup satan duygusal yatırımcı ile düzenli alım yapan (DCA) ve sabırlı bekleyen yatırımcının arasındaki &lsquo;Davranışsal Kayıp Maliyetini&rsquo; simüle edin.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-purple-500/25 grid grid-cols-3 gap-2 text-center text-[11px]">
+                      <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 font-bold">Sabırlı: +%42,8</div>
+                      <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-300 font-bold">DCA: +%47,1</div>
+                      <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-300 font-bold">Panik: +%11,4</div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Kahneman &amp; Tversky Kayıptan Kaçınma Modeli</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/analytics?tab=BEHAVIORAL")}
+                      className="px-4 py-2 rounded-xl bg-purple-600/90 hover:bg-purple-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 8. Aylık Getiri Isı Haritası (Monthly Heatmap) & Tarihi Kriz Stres Testi */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-teal-950/60 via-slate-900/95 to-slate-950 border border-teal-500/30 hover:border-teal-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/40 text-[11px] font-extrabold text-teal-300">
+                        ÖZELLİK #08 • ISI HARİTASI &amp; STRES TESTİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-teal-400">Win Rate %</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-teal-200 transition-colors">
+                      🗓️ 8. Aylık Getiri Isı Haritası (Monthly Heatmap) &amp; Tarihi Kriz Stres Testi
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Fonun son 12 ayda hangi aylarda pozitif kapattığını (Win Rate %) ısı haritasında görün ve geçmiş piyasa şoklarında kaç günde toparlandığını test edin.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-teal-500/25 flex items-center justify-between gap-1.5">
+                      {[
+                        "+4,2%",
+                        "+6,1%",
+                        "-1,8%",
+                        "+5,4%",
+                        "+3,9%",
+                        "-0,9%",
+                        "+7,2%",
+                        "+4,8%",
+                      ].map((v, i) => (
+                        <span
+                          key={i}
+                          className={`px-2 py-1 rounded text-[10px] font-mono font-bold ${
+                            v.startsWith("+")
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : "bg-rose-500/20 text-rose-300"
+                          }`}
+                        >
+                          {v}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">12 Aylık Pozitif Kapanış &amp; Kriz Dayanıklılığı</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/analytics?tab=PERF_HEATMAP")}
+                      className="px-4 py-2 rounded-xl bg-teal-600/90 hover:bg-teal-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 9. Sanal Sepet Pearson Korelasyon (r) & Sahte Çeşitlendirme Analizi */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-orange-950/60 via-slate-900/95 to-slate-950 border border-orange-500/30 hover:border-orange-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-400/40 text-[11px] font-extrabold text-orange-300">
+                        ÖZELLİK #09 • MARKOWITZ KORELASYON MATRİSİ
+                      </span>
+                      <span className="text-xs font-mono font-bold text-orange-400">Pearson r</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-orange-200 transition-colors">
+                      🎯 9. Sanal Sepet Pearson Korelasyon (r) &amp; Sahte Çeşitlendirme Analizi
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Sepetinize eklediğiniz fonların birbirini tekrar edip etmediğini (r &gt; 0.80) matematiksel korelasyon matrisiyle ölçün, gerçek risk dağılımı sağlayın.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-orange-500/25 flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-emerald-300">AFT × TTA: r = 0,14 (İdeal Dağılım ✅)</span>
+                      <span className="text-amber-300">Overlap Uyarısı: r &gt; 0,80</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Çoklu Fon Portföy &amp; Korelasyon Laboratuvarı</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/baskets")}
+                      className="px-4 py-2 rounded-xl bg-orange-600/90 hover:bg-orange-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 10. Tek Tıkla Resmi PDF Fon Şeffaflık Karnesi & SPK Risk Eşleştirici */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-pink-950/60 via-slate-900/95 to-slate-950 border border-pink-500/30 hover:border-pink-400/80 transition-all duration-300 flex flex-col justify-between space-y-4 shadow-xl group">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 text-[11px] font-extrabold text-pink-300">
+                        ÖZELLİK #10 • AKADEMİK PDF KARNE &amp; SPK RİSK
+                      </span>
+                      <span className="text-xs font-mono font-bold text-pink-400">PDF &amp; 1-7 Ölçek</span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-white group-hover:text-pink-200 transition-colors">
+                      📄 10. Tek Tıkla Resmi PDF Fon Şeffaflık Karnesi &amp; SPK Risk Eşleştirici
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      İncelediğiniz her fonun tüm şeffaflık, SPK Md. 52-53 kanıt ve risk metriklerini tek sayfalık akademik PDF raporu olarak indirin.
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950/80 border border-pink-500/25 flex items-center justify-between text-[11px]">
+                      <span className="text-pink-300 font-bold">📄 Akademik Fon Şeffaflık Karnesi (.PDF)</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-pink-500/20 text-pink-200 font-mono font-bold">
+                        SPK 1-7 Uygunluk
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Tek Sayfalık Resmi Rapor &amp; Yatırımcı Uyumu</span>
+                    <button
+                      type="button"
+                      onClick={() => navigateToModule("/transparency?tab=SCORES_SPK")}
+                      className="px-4 py-2 rounded-xl bg-pink-600/90 hover:bg-pink-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <span>Analizde Gör &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 

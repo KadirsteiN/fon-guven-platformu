@@ -76,13 +76,45 @@ export type AdminTabKey =
   | "security";
 
 export default function AdminHubView({
-  initialTab = "overview",
+  initialTab = "funds",
 }: {
   initialTab?: AdminTabKey;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AdminTabKey>(initialTab);
   const [authChecked, setAuthChecked] = useState(false);
+
+  // Kategorili Sol Menü (6 Ana Kategori) & Alt Sekme State'leri
+  const [contentSubTab, setContentSubTab] = useState<
+    "bulletins" | "spk_legal" | "glossary_econ"
+  >(initialTab === "legal" ? "spk_legal" : "bulletins");
+  const [tubitakSubTab, setTubitakSubTab] = useState<
+    "ALL" | "REPORT" | "SURVEY" | "TELEMETRY"
+  >("ALL");
+  const [fundsTableSearch, setFundsTableSearch] = useState("");
+  const [fundsTablePage, setFundsTablePage] = useState(1);
+
+  const mainCategory:
+    | "cat_funds"
+    | "cat_verification"
+    | "cat_content"
+    | "cat_tubitak"
+    | "cat_inbox"
+    | "cat_settings" =
+    activeTab === "funds" || activeTab === "overview"
+      ? "cat_funds"
+      : activeTab === "tefas_verification"
+      ? "cat_verification"
+      : activeTab === "bulletins" || activeTab === "legal"
+      ? "cat_content"
+      : activeTab === "tubitak_report" ||
+        activeTab === "survey" ||
+        activeTab === "telemetry" ||
+        activeTab === "research"
+      ? "cat_tubitak"
+      : activeTab === "inbox"
+      ? "cat_inbox"
+      : "cat_settings";
 
   // Genel Durum & Senkronizasyon state
   const [syncData, setSyncData] = useState<any>(null);
@@ -1164,156 +1196,337 @@ export default function AdminHubView({
     );
   }
 
+  const quotaInfo =
+    syncData?.db_quota ||
+    systemHealth?.db_quota ||
+    securityDashboard?.db_quota || {
+      used_mb: 24.0,
+      max_mb: 1024,
+      used_pct: 2.34,
+      free_pct: 97.66,
+    };
+  const trackedFundsCount =
+    fundsList.length ||
+    syncData?.database_state?.tracked_funds_count ||
+    systemHealth?.database?.funds_count ||
+    60;
+  const surveyTotalCount =
+    surveyAnalytics?.total_responses ??
+    systemHealth?.database?.survey_responses_count ??
+    0;
+  const blockedAttacksCount =
+    (securityDashboard?.blocked_ips?.length || 0) +
+    (securityDashboard?.summary?.total_blocked_requests || 0);
+
+  const ADMIN_SIDEBAR_CATEGORIES = [
+    {
+      id: "cat_funds" as const,
+      targetTab: "funds" as AdminTabKey,
+      title: "📁 1. Fon & Veri Yönetimi (TEFAS Havuzu)",
+      subtitle:
+        "Fon ekleme, rastgele 5 fon keşfetme, mevcut fonları düzenleme/silme ve tüm fiyatları senkronize etme.",
+      helperTip:
+        "💡 Bu bölüm ne işe yarar? Platformda takip edilen TEFAS yatırım fonu havuzunu yönetir; tekil fon kodu ekleyebilir, keşif havuzundan rastgele 5 gerçek fon çekebilir, CSV yükleyebilir ve tüm fiyatları senkronize edebilirsiniz.",
+    },
+    {
+      id: "cat_verification" as const,
+      targetTab: "tefas_verification" as AdminTabKey,
+      title: "✅ 2. TEFAS Veri Doğruluk & Kanıt Radarı",
+      subtitle:
+        "Sitedeki fon fiyatlarının kuruşu kuruşuna doğruluğunu ve matematiksel getiri sağlamasını kanıtlayan güven ekranı.",
+      helperTip:
+        "💡 Bu bölüm ne işe yarar? Sitedeki tüm fonların 6 ondalıklı birim pay fiyatlarının kuruşu kuruşuna doğruluğunu, bileşik getiri formülü sağlamasını ve resmi TEFAS/KAP doğrulama köprülerini kanıtlar.",
+    },
+    {
+      id: "cat_content" as const,
+      targetTab: "bulletins" as AdminTabKey,
+      title: "📑 3. İçerik Merkezi (Bültenler, SPK Kanıtları & Sözlük)",
+      subtitle:
+        "PDF/Link fon bültenleri, SPK Md. 52-53 şeffaflık kanıtları ve finansal sözlük terimleri yönetimi.",
+      helperTip:
+        "💡 Bu bölüm ne işe yarar? Resmi KAP/TEFAS linki veya PDF ile fon bültenleri yayınlamanızı, SPK Md. 52-53 kanıt/yasal metinlerini ve finansal sözlük ile makroekonomik simülatör parametrelerini yönetmenizi sağlar.",
+    },
+    {
+      id: "cat_tubitak" as const,
+      targetTab: "tubitak_report" as AdminTabKey,
+      title: "🎓 4. TÜBİTAK Araştırma & Rapor Merkezi",
+      subtitle:
+        "Anket sonuçları, şüpheli yanıt temizleme, kullanıcı tıklama istatistikleri ve tek tıkla TÜBİTAK 2209-A akademik bulgu metni üretici.",
+      helperTip:
+        "💡 Bu bölüm ne işe yarar? TÜBİTAK 2209-A sonuç raporuna doğrudan kopyalanabilir akademik bulgu metinleri üretir, anket sonuçlarını (şüpheli yanıt temizleme dahil) ve kullanıcı tıklama telemetrisini sunar.",
+    },
+    {
+      id: "cat_inbox" as const,
+      targetTab: "inbox" as AdminTabKey,
+      title: `📬 5. Gelen Kutusu & Ziyaretçi Mesajları${
+        unreadCount > 0 ? ` (${unreadCount} Yeni)` : ""
+      }`,
+      subtitle:
+        "İletişim formundan gelen mesajlar, gönderen bilgileri (Ad, E-posta, Telefon) ve okundu/sil yönetimi.",
+      helperTip:
+        "💡 Bu bölüm ne işe yarar? İletişim (/contact) sayfasından KVKK açık rıza onayıyla gönderilen ziyaretçi mesajlarını, gönderen iletişim bilgilerini incelemenizi ve okundu/sil durumlarını yönetmenizi sağlar.",
+    },
+    {
+      id: "cat_settings" as const,
+      targetTab: "branding" as AdminTabKey,
+      title: "⚙️ 6. Site Ayarları, Güvenlik & Yedekleme",
+      subtitle:
+        "Logo yükleme, duyuru bandı, sağ alt soru animasyon süreleri, siber güvenlik logları ve JSON yedekleme.",
+      helperTip:
+        "💡 Bu bölüm ne işe yarar? Bilgisayardan Base64 logo yükleme, üst duyuru bandı, sağ alt hızlı akademik soru widget süreleri, siber güvenlik/Brute-Force kalkanı ve tam JSON veritabanı yedeklemesini yönetir.",
+    },
+  ];
+
+  const activeCategoryObj =
+    ADMIN_SIDEBAR_CATEGORIES.find((c) => c.id === mainCategory) ||
+    ADMIN_SIDEBAR_CATEGORIES[0];
+
   return (
     <div className="space-y-6">
-      {/* Üst Yönetici Başlığı & Sekmeler */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+      {/* 1. ÜST HIZLI DURUM BAŞLIĞI (TOP STATUS HEADER — HER ZAMAN GÖRÜNEN 4 DURUM KARTI) */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />
-              TÜBİTAK 2209-A • Tam Yetkili Yönetici Kontrol Merkezi (Admin Hub)
+              TÜBİTAK 2209-A • Kategorili Yönetici Komuta Merkezi (Admin Hub)
             </span>
-            <h2 className="text-xl font-bold">
-              Sistem, Otomatik Senkronizasyon, Bülten Keşif, İletişim ve Telemetri Yönetimi
+            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
+              Yatırım Fonu Veri Havuzu, Akademik Araştırma, İçerik ve Güvenlik Komuta Merkezi
             </h2>
           </div>
 
           <button
             onClick={handleLogout}
-            className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-bold inline-flex items-center gap-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 self-start"
+            className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-bold inline-flex items-center gap-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 self-start shrink-0"
           >
             <LogOut className="w-3.5 h-3.5" />
             Oturumu Kapat
           </button>
         </div>
 
-        {/* 10 Sekme Menüsü */}
-        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-          {[
-            {
-              key: "overview" as AdminTabKey,
-              label: "1. Genel Durum & Senkronizasyon",
-              icon: RefreshCw,
-            },
-            {
-              key: "tefas_verification" as AdminTabKey,
-              label: "✅ Veri Doğruluk & TEFAS Kanıt Radarı",
-              icon: CheckCircle2,
-            },
-            {
-              key: "security" as AdminTabKey,
-              label: "🛡️ Siber Güvenlik & Trafik Kalkanı",
-              icon: ShieldCheck,
-            },
-            {
-              key: "survey" as AdminTabKey,
-              label: "📊 Anket Sonuçları (TÜBİTAK 2209-A)",
-              icon: Award,
-            },
-            {
-              key: "tubitak_report" as AdminTabKey,
-              label: "📝 TÜBİTAK Rapor Üretici",
-              icon: Sparkles,
-            },
-            {
-              key: "inbox" as AdminTabKey,
-              label: `📩 Gelen Mesajlar${
-                unreadCount > 0 ? ` (${unreadCount} Yeni)` : ""
-              }`,
-              icon: Inbox,
-            },
-            {
-              key: "telemetry" as AdminTabKey,
-              label: "📈 Detaylı Fon/Modül İstatistikleri",
-              icon: BarChart3,
-            },
-            {
-              key: "bulletins" as AdminTabKey,
-              label: "Bülten Keşfet & PDF Giriş Merkezi",
-              icon: FileText,
-            },
-            {
-              key: "funds" as AdminTabKey,
-              label: "TEFAS Fon Havuzu & Rastgele 5 Fon Keşfet",
-              icon: Database,
-            },
-            {
-              key: "branding" as AdminTabKey,
-              label: "Site Ayarları, Karşılama Ekranı & Söz Yönetimi",
-              icon: Settings,
-            },
-            {
-              key: "research" as AdminTabKey,
-              label: "TÜBİTAK 2209-A Araştırma & Metodoloji",
-              icon: GraduationCap,
-            },
-            {
-              key: "legal" as AdminTabKey,
-              label: "Yasal Metinler & Sözleşmeler",
-              icon: Scale,
-            },
-          ].map((t) => {
-            const Icon = t.icon;
-            const active = activeTab === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors ${
-                  active
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 💾 Bulut Veritabanı Kota Durumu (Neon PostgreSQL 1 GB Kota Koruması) */}
-        {(() => {
-          const quota =
-            syncData?.db_quota ||
-            systemHealth?.db_quota ||
-            securityDashboard?.db_quota || {
-              used_mb: 24.0,
-              max_mb: 1024,
-              used_pct: 2.34,
-              free_pct: 97.66,
-            };
-          return (
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <Database className="w-3.5 h-3.5 text-emerald-600" />
-                  💾 Bulut Veritabanı Kota Durumu (Neon PostgreSQL)
-                </span>
-                <div className="flex items-center gap-3 font-mono text-xs">
-                  <span className="font-bold text-blue-600 dark:text-blue-400">
-                    {quota.used_mb} MB / {quota.max_mb} MB Kullanıldı
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[11px]">
-                    %{quota.free_pct} Boş
-                  </span>
-                </div>
-              </div>
-              <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-blue-600 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.max(2, Math.min(100, quota.used_pct || 2.5))}%` }}
-                />
-              </div>
+        {/* Her Zaman Görünen 4 Küçük Durum Kartı */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {/* Kart 1: Bulut Veritabanı Durumu */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>🟢 Bulut Veritabanı Durumu</span>
+              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                Neon PostgreSQL Aktif
+              </span>
             </div>
-          );
-        })()}
+            <div className="text-xs font-mono font-extrabold text-slate-900 dark:text-white">
+              Kullanılan: {quotaInfo.used_mb} MB / {quotaInfo.max_mb} MB
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-blue-600 rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.max(3, Math.min(100, quotaInfo.used_pct || 2.5))}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Kart 2: Takip Edilen Fon Sayısı */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between gap-2">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>📈 Takip Edilen Fon Sayısı</span>
+              <span className="text-sm font-extrabold font-mono text-blue-600 dark:text-blue-400">
+                {trackedFundsCount} Aktif Fon
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={syncingNow}
+              className="w-full py-1.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncingNow ? "animate-spin" : ""}`} />
+              <span>
+                {syncingNow
+                  ? "Fiyatlar Güncelleniyor..."
+                  : "🔄 Tüm Fiyatları Şimdi Güncelle"}
+              </span>
+            </button>
+          </div>
+
+          {/* Kart 3: Toplam Anket & İletişim */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between gap-2">
+            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              📊 Toplam Anket &amp; İletişim
+            </div>
+            <div className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+              <span className="text-indigo-600 dark:text-indigo-400">
+                {surveyTotalCount} Anket Katılımı
+              </span>{" "}
+              <span className="text-slate-400">|</span>{" "}
+              <span className="text-amber-600 dark:text-amber-400">
+                {unreadCount} Okunmamış Mesaj
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              TÜBİTAK 2209-A Saha Ölçeği &amp; Geri Bildirim
+            </div>
+          </div>
+
+          {/* Kart 4: Güvenlik Kalkanı */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 flex flex-col justify-between gap-2">
+            <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              🛡️ Güvenlik Kalkanı
+            </div>
+            <div className="text-xs sm:text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+              Aktif ({blockedAttacksCount} Engellenen Saldırı)
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Brute-Force Kilidi + Rate Limit + WAF
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* SEKME 1: GENEL DURUM & APSCHEDULER SENKRONİZASYON */}
-      {activeTab === "overview" && (
-        <div className="space-y-6">
+      {/* 2. SOL KATEGORİLİ ADMİN MENÜSÜ (6 ANA KATEGORİ) VE SAĞ GENİŞ ÇALIŞMA ALANI */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Sol Dikey Kategorili Admin Sidebar Menüsü */}
+        <aside className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-20 space-y-2.5 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="px-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+            <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+              Komuta Merkezi Kategorileri (6 Bölüm)
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {ADMIN_SIDEBAR_CATEGORIES.map((cat) => {
+              const isSelected = mainCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveTab(cat.targetTab)}
+                  className={`w-full text-left p-3.5 rounded-2xl border transition-all ${
+                    isSelected
+                      ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20"
+                      : "bg-slate-50/80 dark:bg-slate-800/60 text-slate-800 dark:text-slate-100 border-slate-200/80 dark:border-slate-700/70 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <div className="text-xs sm:text-sm font-extrabold leading-snug">
+                    {cat.title}
+                  </div>
+                  <p
+                    className={`text-[11px] mt-1 leading-relaxed ${
+                      isSelected
+                        ? "text-blue-100"
+                        : "text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
+                    {cat.subtitle}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* Sağ Geniş Çalışma Alanı (Workspace) */}
+        <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-6 min-w-0">
+          {/* 3. KULLANICI DOSTU YARDIMCI İPUCU KUTUSU (HELPER TIP) */}
+          <div className="order-1 p-4 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 text-xs sm:text-sm font-medium text-blue-950 dark:text-blue-200 flex items-start gap-2.5 shadow-sm">
+            <span className="leading-relaxed">{activeCategoryObj.helperTip}</span>
+          </div>
+
+          {/* KATEGORİ 3 (İÇERİK MERKEZİ) İÇİN 3 TEMİZ ALT SEKME ÇUBUĞU */}
+          {mainCategory === "cat_content" && (
+            <div className="order-1 p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-2 shadow-sm">
+              {[
+                {
+                  id: "bulletins" as const,
+                  label: "📄 Fon Bültenleri",
+                  desc: "Resmi KAP/TEFAS Linki & PDF Girişi",
+                },
+                {
+                  id: "spk_legal" as const,
+                  label: "⚖️ SPK Kanıtları & Yasal Metinler",
+                  desc: "SPKn Md. 52-53 & 5 Resmi Sözleşme",
+                },
+                {
+                  id: "glossary_econ" as const,
+                  label: "📚 Sözlük Terimleri & Ekonomik Parametreler",
+                  desc: "Finansal Sözlük & Fisher Katsayıları",
+                },
+              ].map((st) => {
+                const active = contentSubTab === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setContentSubTab(st.id);
+                      if (st.id === "bulletins") setActiveTab("bulletins");
+                      if (st.id === "spk_legal") setActiveTab("legal");
+                    }}
+                    className={`p-3 rounded-xl text-left transition-all ${
+                      active
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    <div className="text-xs font-extrabold">{st.label}</div>
+                    <div
+                      className={`text-[10px] mt-0.5 ${
+                        active ? "text-blue-100" : "text-slate-500"
+                      }`}
+                    >
+                      {st.desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* KATEGORİ 4 (TÜBİTAK ARAŞTIRMA & RAPOR MERKEZİ) İÇİN ALT SEKME SEÇİCİ */}
+          {mainCategory === "cat_tubitak" && (
+            <div className="order-1 p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-4 gap-2 shadow-sm">
+              {[
+                {
+                  id: "ALL" as const,
+                  label: "🌟 Tümü Birlikte (1 + 2 + 3)",
+                },
+                {
+                  id: "REPORT" as const,
+                  label: "📝 1. Otomatik TÜBİTAK Rapor Bulguları Üretici",
+                },
+                {
+                  id: "SURVEY" as const,
+                  label: "📊 2. Anket Sonuçları & Grafikleri",
+                },
+                {
+                  id: "TELEMETRY" as const,
+                  label: "👁️ 3. Fon ve Modül Tıklama Telemetrisi",
+                },
+              ].map((st) => {
+                const active = tubitakSubTab === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setTubitakSubTab(st.id)}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-extrabold transition-all text-center ${
+                      active
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* SEKME 1 (KATEGORİ 1 ALT BÖLÜMÜ): OTOMATİK VE MANUEL SENKRONİZASYON GÜNLÜĞÜ */}
+          {mainCategory === "cat_funds" && (
+            <div className="order-3 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
               <div className="text-xs text-slate-500 flex items-center justify-between">
@@ -1434,265 +1647,296 @@ export default function AdminHubView({
               </table>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* SİSTEM SAĞLIĞI & VERİTABANI YEDEKLEME (JSON BACKUP / RESTORE) */}
+      {/* KATEGORİ 6 — KART 4: 💾 VERİTABANI YEDEKLEME & SIFIRLAMA (JSON BACKUP / RESTORE) */}
+      {mainCategory === "cat_settings" && (
+        <div className="order-4 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                4. 💾 Veritabanı Yedekleme &amp; Sıfırlama (Tam JSON Yedek Motoru)
+              </div>
+              <h3 className="text-base font-bold">
+                💾 Veritabanı Yedekleme &amp; Sıfırlama: Tek Tıkla Tam JSON Yedek İndirme ve Geri Yükleme
+              </h3>
+              <p className="text-xs text-slate-500">
+                Neon PostgreSQL veritabanındaki tüm fonları, bültenleri, anketleri ve mesajları tek tıkla bilgisayarınıza JSON olarak indirin veya geri yükleyin.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadFullDbBackup}
+                disabled={downloadingDbBackup}
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {downloadingDbBackup ? "Paketleniyor..." : "💾 Tüm Veritabanını Yedek İndir (JSON)"}
+              </button>
+
+              <label className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
+                <UploadCloud className="w-3.5 h-3.5" />
+                {restoringDbBackup ? "Yükleniyor..." : "📤 Yedekten Geri Yükle (Restore JSON)"}
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleRestoreFullDbBackup}
+                  disabled={restoringDbBackup}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
+          {backupRestoreMsg && (
+            <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-900 dark:text-blue-200 font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>{backupRestoreMsg}</span>
+            </div>
+          )}
+
+          {systemHealth && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] text-slate-500 font-semibold">Takip Edilen Fon</div>
+                <div className="text-lg font-bold text-blue-600">{systemHealth.database?.funds_count || 0} Fon</div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] text-slate-500 font-semibold">Gerçek Fiyat Kaydı</div>
+                <div className="text-lg font-bold text-indigo-600 font-mono">
+                  {Number(systemHealth.database?.prices_count || 0).toLocaleString("tr-TR")}
+                </div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] text-slate-500 font-semibold">KAP Bülteni</div>
+                <div className="text-lg font-bold text-amber-600">{systemHealth.database?.bulletins_count || 0} Adet</div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] text-slate-500 font-semibold">Resmi Kanıt Kartı</div>
+                <div className="text-lg font-bold text-emerald-600">{systemHealth.database?.evidence_count || 0} Kart</div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] text-slate-500 font-semibold">Anket Katılımcısı</div>
+                <div className="text-lg font-bold text-purple-600">{systemHealth.database?.survey_responses_count || 0} Kişi</div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] text-slate-500 font-semibold">TEFAS API Servisi</div>
+                <div className="text-sm font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  ÇEVRİMİÇİ
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* KATEGORİ 3 ALT SEKME 3: 📚 SÖZLÜK TERİMLERİ & EKONOMİK PARAMETRELER */}
+      {mainCategory === "cat_content" && contentSubTab === "glossary_econ" && (
+        <div className="order-2 space-y-6">
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-full mb-1">
+                <Sliders className="w-3.5 h-3.5" />
+                📚 Finansal Sözlük &amp; Fisher Reel Getiri Simülatörü Katsayıları
+              </div>
+              <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                Dinamik Makroekonomik Katsayılar (TÜFE, Mevduat, Stopaj ve Yönetim Ücreti)
+              </h4>
+              <p className="text-xs text-slate-500">
+                Fisher Reel Getiri Simülatörü ve 10 Yıllık Yönetim Ücreti Erimesi modüllerinde varsayılan olarak kullanılan TÜFE, Mevduat ve Stopaj parametrelerini güncelleyin.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                  Yıllık TÜFE Enflasyon (%):
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={economicData.annual_inflation_pct}
+                  onChange={(e) => setEconomicData({ ...economicData, annual_inflation_pct: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                  Mevduat / TLREF Yıllık Faiz (%):
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={economicData.deposit_rate_pct}
+                  onChange={(e) => setEconomicData({ ...economicData, deposit_rate_pct: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                  Varsayılan Stopaj Vergisi (%):
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={economicData.default_stopaj_pct}
+                  onChange={(e) => setEconomicData({ ...economicData, default_stopaj_pct: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                  Varsayılan Fon Yönetim Ücreti (%):
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={economicData.mgmt_fee_default_pct}
+                  onChange={(e) => setEconomicData({ ...economicData, mgmt_fee_default_pct: Number(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            {economicMsg && (
+              <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">
+                {economicMsg}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSaveEconomic}
+              disabled={savingEconomic}
+              className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {savingEconomic ? "Kaydediliyor..." : "Ekonomik Parametreleri Kaydet"}
+            </button>
+          </div>
+
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Sistem Sağlığı &amp; Tam Yedekleme (Render Koruma Motoru)
-                </div>
-                <h3 className="text-base font-bold">
-                  Veritabanı Sağlık Durumu &amp; Tek Tıkla Full JSON Yedek / Geri Yükleme
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Render Ephemeral Filesystem sıfırlanmalarına karşı tüm fonları, bültenleri, anketleri ve mesajları tek tıkla bilgisayarınıza indirin veya geri yükleyin.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadFullDbBackup}
-                  disabled={downloadingDbBackup}
-                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  {downloadingDbBackup ? "Paketleniyor..." : "💾 Tüm Veritabanını Yedek İndir (JSON)"}
-                </button>
-
-                <label className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm cursor-pointer transition-colors">
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  {restoringDbBackup ? "Yükleniyor..." : "📤 Yedekten Geri Yükle (Restore JSON)"}
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleRestoreFullDbBackup}
-                    disabled={restoringDbBackup}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {backupRestoreMsg && (
-              <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-900 dark:text-blue-200 font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>{backupRestoreMsg}</span>
-              </div>
-            )}
-
-            {systemHealth && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-[10px] text-slate-500 font-semibold">Takip Edilen Fon</div>
-                  <div className="text-lg font-bold text-blue-600">{systemHealth.database?.funds_count || 0} Fon</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-[10px] text-slate-500 font-semibold">Gerçek Fiyat Kaydı</div>
-                  <div className="text-lg font-bold text-indigo-600 font-mono">
-                    {Number(systemHealth.database?.prices_count || 0).toLocaleString("tr-TR")}
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-[10px] text-slate-500 font-semibold">KAP Bülteni</div>
-                  <div className="text-lg font-bold text-amber-600">{systemHealth.database?.bulletins_count || 0} Adet</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-[10px] text-slate-500 font-semibold">Resmi Kanıt Kartı</div>
-                  <div className="text-lg font-bold text-emerald-600">{systemHealth.database?.evidence_count || 0} Kart</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-[10px] text-slate-500 font-semibold">Anket Katılımcısı</div>
-                  <div className="text-lg font-bold text-purple-600">{systemHealth.database?.survey_responses_count || 0} Kişi</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-[10px] text-slate-500 font-semibold">TEFAS API Servisi</div>
-                  <div className="text-sm font-bold text-emerald-600 mt-1 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    ÇEVRİMİÇİ
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* CANLI DUYURU BANDI & DİNAMİK EKONOMİK PARAMETRELER (2 SÜTUNLU KART) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Sol: Canlı Duyuru Bandı Yönetimi */}
-            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full mb-1">
-                    <Megaphone className="w-3.5 h-3.5" />
-                    Canlı Bilgi &amp; Duyuru Bandı
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Sitenin En Üstünde Görünecek Duyuru Çubuğu
-                  </h4>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
-                  <input
-                    type="checkbox"
-                    checked={announcementData.enabled}
-                    onChange={(e) => setAnnouncementData({ ...announcementData, enabled: e.target.checked })}
-                    className="w-4 h-4 rounded text-blue-600"
-                  />
-                  <span>Duyuru Bandını Sitede Aktif Olarak Göster</span>
-                </label>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Duyuru Metni:
-                  </label>
-                  <input
-                    type="text"
-                    value={announcementData.text}
-                    onChange={(e) => setAnnouncementData({ ...announcementData, text: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                      Rozet Metni:
-                    </label>
-                    <input
-                      type="text"
-                      value={announcementData.badge}
-                      onChange={(e) => setAnnouncementData({ ...announcementData, badge: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                      Yönlendirme Linki:
-                    </label>
-                    <input
-                      type="text"
-                      value={announcementData.link_url}
-                      onChange={(e) => setAnnouncementData({ ...announcementData, link_url: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
-                    />
-                  </div>
-                </div>
-
-                {announcementMsg && (
-                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">
-                    {announcementMsg}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleSaveAnnouncement}
-                  disabled={savingAnnouncement}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {savingAnnouncement ? "Kaydediliyor..." : "Duyuruyu Yayınla"}
-                </button>
-              </div>
-            </div>
-
-            {/* Sağ: Dinamik Ekonomik Parametreler & Simülatör Kontrolü */}
-            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-              <div>
-                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-full mb-1">
-                  <Sliders className="w-3.5 h-3.5" />
-                  Reel Getiri Simülatörü Kontrolü
-                </div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Dinamik Makroekonomik Katsayılar
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-full mb-1">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Akademik Finansal Sözlük &amp; Halk Dili İpuçları Havuzu
+                </span>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  📚 Finansal Sözlük Terimleri &amp; SPK Mevzuat Kavramları (/glossary)
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Reel Getiri hesaplamasında varsayılan olarak kullanılan TÜFE, Mevduat ve Stopaj parametrelerini doğrudan güncelleyin.
+                  Sözlük sayfasında yer alan 30+ akademik terim (Sharpe, Sortino, Max Drawdown, Jensen Alfası, R², Fisher Denklemi, SPKn Md. 52-53, Takasbank Saklama) aktif olarak yayındadır.
                 </p>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Yıllık TÜFE Enflasyon (%):
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={economicData.annual_inflation_pct}
-                    onChange={(e) => setEconomicData({ ...economicData, annual_inflation_pct: Number(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Mevduat / TLREF Yıllık Faiz (%):
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={economicData.deposit_rate_pct}
-                    onChange={(e) => setEconomicData({ ...economicData, deposit_rate_pct: Number(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Varsayılan Stopaj Vergisi (%):
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={economicData.default_stopaj_pct}
-                    onChange={(e) => setEconomicData({ ...economicData, default_stopaj_pct: Number(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Varsayılan Fon Yönetim Ücreti (%):
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={economicData.mgmt_fee_default_pct}
-                    onChange={(e) => setEconomicData({ ...economicData, mgmt_fee_default_pct: Number(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              {economicMsg && (
-                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">
-                  {economicMsg}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSaveEconomic}
-                disabled={savingEconomic}
-                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
+              <a
+                href="/glossary"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0"
               >
-                <Save className="w-3.5 h-3.5" />
-                {savingEconomic ? "Kaydediliyor..." : "Ekonomik Parametreleri Kaydet"}
-              </button>
+                <span>Sözlük Sayfasını Gör ↗</span>
+              </a>
             </div>
           </div>
         </div>
       )}
 
-      {/* SEKME 2: SİTE AYARLARI, LOGO & KARŞILAMA EKRANI / SÖZ YÖNETİMİ */}
-      {activeTab === "branding" && (
-        <div className="space-y-6">
+      {/* KATEGORİ 6 — KART 1 & KART 2: 🎨 GÖRÜNÜM & LOGO AYARLARI + 🎯 SAĞ ALT WIDGET AYARLARI */}
+      {mainCategory === "cat_settings" && (
+        <div className="order-2 space-y-6">
+          {/* KART 1A: Üst Duyuru Bandı Metni */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full mb-1">
+                  <Megaphone className="w-3.5 h-3.5" />
+                  1A. 🎨 Görünüm &amp; Üst Duyuru Bandı Ayarları
+                </div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  Sitenin En Üstünde Görünecek Canlı Duyuru Çubuğu
+                </h4>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold">
+                <input
+                  type="checkbox"
+                  checked={announcementData.enabled}
+                  onChange={(e) => setAnnouncementData({ ...announcementData, enabled: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600"
+                />
+                <span>Duyuru Bandını Sitede Aktif Olarak Göster</span>
+              </label>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                  Duyuru Metni:
+                </label>
+                <input
+                  type="text"
+                  value={announcementData.text}
+                  onChange={(e) => setAnnouncementData({ ...announcementData, text: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Rozet Metni:
+                  </label>
+                  <input
+                    type="text"
+                    value={announcementData.badge}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, badge: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                    Yönlendirme Linki:
+                  </label>
+                  <input
+                    type="text"
+                    value={announcementData.link_url}
+                    onChange={(e) => setAnnouncementData({ ...announcementData, link_url: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
+                  />
+                </div>
+              </div>
+
+              {announcementMsg && (
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold">
+                  {announcementMsg}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveAnnouncement}
+                disabled={savingAnnouncement}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {savingAnnouncement ? "Kaydediliyor..." : "Duyuruyu Yayınla"}
+              </button>
+            </div>
+          </div>
+
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
             <div>
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1">
+                1B. 🎨 Görünüm &amp; Logo Ayarları + 2. 🎯 Sağ Alt &ldquo;Hızlı Akademik Soru&rdquo; Widget Ayarları
+              </span>
               <h3 className="text-base font-bold">
-                Site Kimliği, Başlık, Alt Başlık ve Logo Yönetimi
+                🎨 Görünüm &amp; Logo Ayarları (Base64) ve 🎯 Sağ Alt Hızlı Akademik Soru Widget Süreleri
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Burada yaptığınız değişiklikler `system_settings` tablosuna
@@ -2100,9 +2344,9 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 3: OTOMATİK BÜLTEN KEŞFET, KILAVUZ VE PDF GİRİŞ MERKEZİ (GÖREV 5) */}
-      {activeTab === "bulletins" && (
-        <div className="space-y-6">
+      {/* KATEGORİ 3 ALT SEKME 1: 📄 FON BÜLTENLERİ (OTOMATİK KEŞFET, RESMİ LİNK VE PDF GİRİŞ MERKEZİ) */}
+      {mainCategory === "cat_content" && contentSubTab === "bulletins" && (
+        <div className="order-2 space-y-6">
           {/* 1. BÖLÜM: Nasıl Bülten Girilir? (Adım Adım Kılavuz Kutusu — GÖREV 5.2) */}
           <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 via-indigo-50/50 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border border-blue-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between gap-2">
@@ -2430,7 +2674,7 @@ export default function AdminHubView({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold mb-1">
                   Kapsadığı Dönem (Örn: 2026-10, 2026-Q3):
@@ -2453,32 +2697,51 @@ export default function AdminHubView({
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">
-                  🔗 Resmi KAP / TEFAS PDF Linki (Önerilen - Veritabanında Yer Kaplamaz):
-                </label>
+            </div>
+
+            {/* YAN YANA 2 NET SEÇENEK KUTUSU: 1) 🔗 Resmi KAP/TEFAS Linki (Önerilen)  2) 📎 PDF Yükle (Maks 1.5 MB) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border-2 border-emerald-400 dark:border-emerald-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
+                    🔗 Resmi KAP/TEFAS Linki (Önerilen)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold">
+                    0 KB Kota Dostu
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  Veritabanında yer kaplamadan bülteni doğrudan resmi KAP veya TEFAS PDF sayfasına bağlayın:
+                </p>
                 <input
                   type="url"
                   placeholder="https://www.kap.org.tr/tr/YatirimFonlari"
                   value={bOriginalUrl}
                   onChange={(e) => setBOriginalUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border-2 border-emerald-400 dark:border-emerald-700 bg-emerald-50/40 dark:bg-slate-800 text-xs font-medium"
+                  className="w-full px-3 py-2 rounded-xl border border-emerald-400 dark:border-emerald-700 bg-white dark:bg-slate-900 text-xs font-medium"
                 />
               </div>
-            </div>
 
-            {/* 1. Seçenek: Önerilen Harici Link Bilgisi + 2. Seçenek: Maks 1.5 MB PDF Yükleme */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="text-xs font-bold">
-                  Belge İçeriği (Önerilen: Yukarıya Resmi KAP/TEFAS Linki Girin veya Maks. 1.5 MB PDF Yükleyin):
-                </label>
-                <label className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700">
-                  <Upload className="w-3.5 h-3.5 text-blue-600" />
+              <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border-2 border-blue-300 dark:border-blue-800 space-y-2 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-blue-900 dark:text-blue-200">
+                      📎 PDF Yükle (Maks 1.5 MB)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-200/80 dark:bg-blue-900 text-blue-900 dark:text-blue-200 text-[10px] font-bold">
+                      Otomatik Metin Okuma
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                    Bilgisayarınızdan aylık fon bülteni PDF dosyasını seçerek metni otomatik ayrıştırın:
+                  </p>
+                </div>
+                <label className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold cursor-pointer inline-flex items-center justify-center gap-2 shadow-sm transition-colors">
+                  <Upload className="w-4 h-4" />
                   <span>
                     {extractingPdf
                       ? "PDF Ayrıştırılıyor..."
-                      : "Bilgisayardan PDF Yükle (Maks. 1.5 MB)"}
+                      : "📎 Bilgisayardan PDF Yükle (Maks 1.5 MB)"}
                   </span>
                   <input
                     type="file"
@@ -2488,6 +2751,12 @@ export default function AdminHubView({
                   />
                 </label>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold block">
+                Belge Ham Metni / Özetlenecek İçerik:
+              </label>
               <textarea
                 rows={5}
                 placeholder="[Sayfa 1] ÖZET: Belge özeti...&#10;[Sayfa 1] KESİN_VERİ: Dönem sonu birim pay fiyatı...&#10;[Sayfa 2] YORUM_BEKLENTİ: Portföy yönetimi beklentisi..."
@@ -2698,33 +2967,94 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 4: TEFAS FON HAVUZU VE RASTGELE 5 YENİ FON KEŞFETME (GÖREV 4) */}
-      {activeTab === "funds" && (
-        <div className="space-y-6">
-          {/* GÖREV 4: Rastgele 5 Yeni TEFAS Fonu Keşfet ve Ekle Kartı */}
-          <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-600 via-blue-700 to-slate-900 text-white shadow-sm space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-1.5">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 border border-white/25">
-                  <Shuffle className="w-3.5 h-3.5" />
-                  Otomatik TEFAS Fon Keşif Motoru (65+ Gerçek TEFAS Fon Havuzu)
+      {/* KATEGORİ 1: 📁 1. FON & VERİ YÖNETİMİ (TEFAS HAVUZU) */}
+      {mainCategory === "cat_funds" && (
+        <div className="order-2 space-y-6">
+          {/* ÜSTTE YAN YANA 2 TEMİZ KUTU: "➕ Tekil TEFAS Fonu Ekle" ve "🎲 Rastgele 5 Gerçek Fon Keşfet & Ekle" */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Kutu 1: ➕ Tekil TEFAS Fonu Ekle */}
+            <form
+              onSubmit={handleAddFund}
+              className="p-6 rounded-2xl bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/70 flex flex-col justify-between space-y-4 shadow-sm"
+            >
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+                  <Plus className="w-3.5 h-3.5" />
+                  Seçenek 1 • Manuel Fon Kodu Girişi
                 </span>
-                <h3 className="text-lg sm:text-xl font-bold">
-                  Rastgele 5 Yeni TEFAS Fonu Keşfet ve 1 Yıllık Verisini Çek
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                  ➕ Tekil TEFAS Fonu Ekle
                 </h3>
-                <p className="text-xs sm:text-sm text-blue-100 max-w-3xl">
-                  Keşif havuzumuzda (`TEFAS_DISCOVERY_POOL`) bulunan ancak henüz
-                  SQLite veritabanımıza eklenmemiş gerçek TEFAS fonları
-                  arasından rastgele 5 tanesini seçer ve son 365 günlük gerçek
-                  tarihsel fiyat, yatırımcı sayısı ve portföy büyüklüğü
-                  verilerini TEFAS API&apos;den çekerek kaydeder.
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  İstediğiniz 3 harfli resmi TEFAS fon kodunu (örn: `TTE`, `BUY`, `HKH`, `OJT`) girin; son 365 günün gerçek TEFAS fiyat serisi anında indirilir.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <input
+                    type="text"
+                    maxLength={5}
+                    required
+                    placeholder="Fon Kodu (Örn: TTE)"
+                    value={newFundCode}
+                    onChange={(e) => setNewFundCode(e.target.value.toUpperCase())}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-extrabold uppercase"
+                  />
+                  <select
+                    value={newFundType}
+                    onChange={(e) => setNewFundType(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                  >
+                    <option value="Hisse Senedi Yoğun Fon">
+                      Hisse Senedi Yoğun Fon
+                    </option>
+                    <option value="Yabancı Hisse / Teknoloji Fonu">
+                      Yabancı Hisse / Teknoloji Fonu
+                    </option>
+                    <option value="Kıymetli Madenler / Altın Fonu">
+                      Kıymetli Madenler / Altın Fonu
+                    </option>
+                    <option value="Para Piyasası (TL) Fonu">
+                      Para Piyasası (TL) Fonu
+                    </option>
+                    <option value="Değişken / Çoklu Varlık Fonu">
+                      Değişken / Çoklu Varlık Fonu
+                    </option>
+                    <option value="Katılım Fonu">Katılım Fonu</option>
+                    <option value="Eurobond / Borçlanma Araçları Fonu">
+                      Eurobond / Borçlanma Araçları Fonu
+                    </option>
+                  </select>
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={addingFund}
+                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-extrabold shadow-sm transition-colors"
+              >
+                {addingFund
+                  ? "TEFAS'tan 1 Yıllık Veri Çekiliyor..."
+                  : "➕ Tekil TEFAS Fonu Ekle (1 Yıllık Veri Çek)"}
+              </button>
+            </form>
+
+            {/* Kutu 2: 🎲 Rastgele 5 Gerçek Fon Keşfet & Ekle */}
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-600 via-blue-700 to-slate-900 text-white shadow-sm flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/15 border border-white/25">
+                  <Shuffle className="w-3.5 h-3.5" />
+                  Seçenek 2 • Otomatik TEFAS Keşif Motoru (65+ Gerçek Fon)
+                </span>
+                <h3 className="text-base sm:text-lg font-extrabold">
+                  🎲 Rastgele 5 Gerçek Fon Keşfet &amp; Ekle
+                </h3>
+                <p className="text-xs text-blue-100 leading-relaxed">
+                  Keşif havuzumuzda bulunan ancak henüz veritabanımıza eklenmemiş gerçek TEFAS fonları arasından rastgele 5 tanesini seçer ve 1 yıllık tarihsel fiyat serisini kaydeder.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleAddRandomFiveFunds}
                 disabled={addingRandomFive}
-                className="px-5 py-3 rounded-xl bg-white text-blue-900 hover:bg-blue-50 font-bold text-xs sm:text-sm inline-flex items-center gap-2 shadow-md shrink-0 transition-colors"
+                className="w-full py-3 px-5 rounded-xl bg-white text-blue-900 hover:bg-blue-50 font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shadow-md transition-colors"
               >
                 <Shuffle
                   className={`w-4 h-4 ${
@@ -2733,154 +3063,88 @@ export default function AdminHubView({
                 />
                 {addingRandomFive
                   ? "5 Yeni Fon TEFAS'tan Çekiliyor..."
-                  : "Rastgele 5 Yeni TEFAS Fonu Ekle (1 Yıllık Veri Çek)"}
+                  : "🎲 Rastgele 5 Gerçek Fon Keşfet & Ekle"}
               </button>
             </div>
-
-            {randomFiveReport?.added_funds && (
-              <div className="p-4 rounded-xl bg-white/10 border border-white/20 space-y-2.5 text-xs">
-                <div className="font-bold flex items-center justify-between">
-                  <span>
-                    Yeni Keşfedilen ve Veritabanına Eklenen 5 TEFAS Fonu (Toplam{" "}
-                    {randomFiveReport.total_records_saved} Yeni İşlem Günü
-                    Kaydı):
-                  </span>
-                  <span className="text-blue-200">
-                    Kalan Keşif Havuzu:{" "}
-                    {randomFiveReport.remaining_discovery_pool_count} Fon
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-                  {randomFiveReport.added_funds.map((af: any) => (
-                    <div
-                      key={af.fund_code}
-                      className="p-3 rounded-xl bg-slate-900/70 border border-white/15 space-y-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-amber-300">
-                          {af.fund_code}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-mono">
-                          {af.trading_days_count} gün
-                        </span>
-                      </div>
-                      <div className="text-[11px] font-medium text-white truncate">
-                        {af.fund_title}
-                      </div>
-                      <div className="text-[10px] text-blue-200 truncate">
-                        {af.fund_type}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-300">
-                        {af.oldest_date} &rarr; {af.newest_date}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 1. Tekil Yeni Fon Ekleme */}
-            <form
-              onSubmit={handleAddFund}
-              className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4"
-            >
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <Plus className="w-4 h-4 text-blue-600" />
-                Belirli Bir TEFAS Fon Kodunu Ekle (1 Yıllık Veri Çek)
-              </h3>
-              <p className="text-xs text-slate-500">
-                İstediğiniz 3 harfli fon kodunu (örn: `TTE`, `BUY`, `HKH`,
-                `OJT`) girin; arka planda `fetch_tefas_history_chunked` ile son
-                365 günün gerçek TEFAS verisi indirilir.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  maxLength={5}
-                  required
-                  placeholder="Fon Kodu (Örn: TTE)"
-                  value={newFundCode}
-                  onChange={(e) => setNewFundCode(e.target.value.toUpperCase())}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold uppercase"
-                />
-                <select
-                  value={newFundType}
-                  onChange={(e) => setNewFundType(e.target.value)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
-                >
-                  <option value="Hisse Senedi Yoğun Fon">
-                    Hisse Senedi Yoğun Fon
-                  </option>
-                  <option value="Yabancı Hisse / Teknoloji Fonu">
-                    Yabancı Hisse / Teknoloji Fonu
-                  </option>
-                  <option value="Kıymetli Madenler / Altın Fonu">
-                    Kıymetli Madenler / Altın Fonu
-                  </option>
-                  <option value="Para Piyasası (TL) Fonu">
-                    Para Piyasası (TL) Fonu
-                  </option>
-                  <option value="Değişken / Çoklu Varlık Fonu">
-                    Değişken / Çoklu Varlık Fonu
-                  </option>
-                  <option value="Katılım Fonu">Katılım Fonu</option>
-                  <option value="Eurobond / Borçlanma Araçları Fonu">
-                    Eurobond / Borçlanma Araçları Fonu
-                  </option>
-                </select>
+          {randomFiveReport?.added_funds && (
+            <div className="p-4 rounded-2xl bg-indigo-950 text-white border border-indigo-700 space-y-2.5 text-xs">
+              <div className="font-bold flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  Yeni Keşfedilen ve Veritabanına Eklenen 5 TEFAS Fonu (Toplam{" "}
+                  {randomFiveReport.total_records_saved} Yeni İşlem Günü Kaydı):
+                </span>
+                <span className="text-blue-200">
+                  Kalan Keşif Havuzu:{" "}
+                  {randomFiveReport.remaining_discovery_pool_count} Fon
+                </span>
               </div>
-              <button
-                type="submit"
-                disabled={addingFund}
-                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm"
-              >
-                {addingFund
-                  ? "TEFAS'tan 1 Yıllık Veri Çekiliyor..."
-                  : "Fon Ekle ve 1 Yıllık Verisini Çek"}
-              </button>
-            </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                {randomFiveReport.added_funds.map((af: any) => (
+                  <div
+                    key={af.fund_code}
+                    className="p-3 rounded-xl bg-slate-900/80 border border-white/15 space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-amber-300">
+                        {af.fund_code}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-mono">
+                        {af.trading_days_count} gün
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-medium text-white truncate">
+                      {af.fund_title}
+                    </div>
+                    <div className="text-[10px] text-blue-200 truncate">
+                      {af.fund_type}
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-300">
+                      {af.oldest_date} &rarr; {af.newest_date}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-            {/* 2. Resmi CSV Yükleme ve Manuel Senkronizasyon */}
-            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-              <h3 className="text-base font-bold flex items-center gap-2">
+          {/* Resmi CSV Yükleme ve Manuel Senkronizasyon Barı */}
+          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h4 className="text-sm font-bold flex items-center gap-2">
                 <Upload className="w-4 h-4 text-emerald-600" />
-                Resmi TEFAS CSV / Excel İçe Aktarma & Manuel Senkronizasyon
-              </h3>
+                Resmi TEFAS CSV / Excel İçe Aktarma &amp; Toplu Fiyat Senkronizasyonu
+              </h4>
               <p className="text-xs text-slate-500">
-                TEFAS Tarihsel Veriler ekranından indirilen resmi CSV/Excel
-                dosyasını seçerek veya anlık senkronizasyon butonuyla havuzu
-                güncelleyebilirsiniz.
+                TEFAS Tarihsel Veriler ekranından indirilen resmi CSV/Excel dosyasını seçerek veya anlık senkronizasyon butonuyla havuzu güncelleyebilirsiniz.
               </p>
-              <div className="flex flex-wrap gap-3">
-                <label className="flex-1 py-2.5 px-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-bold cursor-pointer flex items-center justify-center gap-2">
-                  <Upload className="w-4 h-4 text-blue-600" />
-                  <span>
-                    {uploadingCsv
-                      ? "CSV Aktarılıyor..."
-                      : "Resmi TEFAS CSV / Excel Dosyası Seç"}
-                  </span>
-                  <input
-                    type="file"
-                    accept=".csv,.xls,.xlsx"
-                    onChange={handleCsvUpload}
-                    className="hidden"
-                  />
-                </label>
+            </div>
+            <div className="flex flex-wrap gap-2.5 shrink-0">
+              <label className="py-2 px-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-bold cursor-pointer inline-flex items-center gap-2">
+                <Upload className="w-3.5 h-3.5 text-blue-600" />
+                <span>
+                  {uploadingCsv ? "CSV Aktarılıyor..." : "Resmi TEFAS CSV Seç"}
+                </span>
+                <input
+                  type="file"
+                  accept=".csv,.xls,.xlsx"
+                  onChange={handleCsvUpload}
+                  className="hidden"
+                />
+              </label>
 
-                <button
-                  type="button"
-                  onClick={handleManualSync}
-                  disabled={syncingNow}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${syncingNow ? "animate-spin" : ""}`}
-                  />
-                  Tüm Fonları Şimdi Güncelle
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleManualSync}
+                disabled={syncingNow}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${syncingNow ? "animate-spin" : ""}`}
+                />
+                🔄 Tüm Fiyatları Şimdi Güncelle
+              </button>
             </div>
           </div>
 
@@ -2890,60 +3154,127 @@ export default function AdminHubView({
             </div>
           )}
 
-          {/* Mevcut Fon Havuzu Tablosu */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-            <h3 className="text-base font-bold">
-              Aktif TEFAS Fon Havuzu ({fundsList.length} Yatırım Fonu)
-            </h3>
-            <div className="overflow-x-auto max-h-96 overflow-y-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                    <th className="py-2 pr-3">Kod</th>
-                    <th className="py-2 px-3">Resmi TEFAS Fon Ünvanı</th>
-                    <th className="py-2 px-3">Kategori</th>
-                    <th className="py-2 px-3 text-right">İşlem Günü</th>
-                    <th className="py-2 px-3 text-right">İlk Tarih</th>
-                    <th className="py-2 px-3 text-right">Son Tarih</th>
-                    <th className="py-2 pl-3 text-right">Son Fiyat</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {fundsList.map((f: any) => (
-                    <tr key={f.fund_code}>
-                      <td className="py-2.5 pr-3 font-bold text-blue-600 dark:text-blue-400">
-                        {f.fund_code}
-                      </td>
-                      <td className="py-2.5 px-3 font-medium">
-                        {f.fund_title}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500">
-                        {f.fund_type}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono">
-                        {f.total_days} gün
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono">
-                        {f.oldest?.date || "-"}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-semibold">
-                        {f.newest?.date || "-"}
-                      </td>
-                      <td className="py-2.5 pl-3 text-right font-mono font-bold">
-                        {formatNumberTR(f.newest?.price, 6)} TL
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {/* Arama Çubuklu ve Sayfalamalı Mevcut Fonlar Tablosu */}
+          {(() => {
+            const q = fundsTableSearch.trim().toLowerCase();
+            const filteredFunds = fundsList.filter((f: any) => {
+              if (!q) return true;
+              return (
+                String(f.fund_code || "").toLowerCase().includes(q) ||
+                String(f.fund_title || "").toLowerCase().includes(q) ||
+                String(f.fund_type || "").toLowerCase().includes(q)
+              );
+            });
+            const pageSize = 15;
+            const totalPages = Math.max(1, Math.ceil(filteredFunds.length / pageSize));
+            const safePage = Math.min(fundsTablePage, totalPages);
+            const pagedFunds = filteredFunds.slice(
+              (safePage - 1) * pageSize,
+              safePage * pageSize
+            );
+
+            return (
+              <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-extrabold">
+                      Mevcut Fonlar Tablosu ({filteredFunds.length} / {fundsList.length} Yatırım Fonu)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Sayfa {safePage} / {totalPages} • Her sayfada {pageSize} fon listelenir.
+                    </p>
+                  </div>
+                  <input
+                    type="text"
+                    value={fundsTableSearch}
+                    onChange={(e) => {
+                      setFundsTableSearch(e.target.value);
+                      setFundsTablePage(1);
+                    }}
+                    placeholder="🔍 Fon kodu, ünvan veya kategori ara..."
+                    className="w-full sm:w-80 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                  />
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                        <th className="py-2 pr-3">Kod</th>
+                        <th className="py-2 px-3">Resmi TEFAS Fon Ünvanı</th>
+                        <th className="py-2 px-3">Kategori</th>
+                        <th className="py-2 px-3 text-right">İşlem Günü</th>
+                        <th className="py-2 px-3 text-right">İlk Tarih</th>
+                        <th className="py-2 px-3 text-right">Son Tarih</th>
+                        <th className="py-2 pl-3 text-right">Son Fiyat</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {pagedFunds.map((f: any) => (
+                        <tr key={f.fund_code} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="py-2.5 pr-3 font-extrabold text-blue-600 dark:text-blue-400">
+                            {f.fund_code}
+                          </td>
+                          <td className="py-2.5 px-3 font-medium">
+                            {f.fund_title}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500">
+                            {f.fund_type}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono">
+                            {f.total_days} gün
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono">
+                            {f.oldest?.date || "-"}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-semibold">
+                            {f.newest?.date || "-"}
+                          </td>
+                          <td className="py-2.5 pl-3 text-right font-mono font-bold">
+                            {formatNumberTR(f.newest?.price, 6)} TL
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Sayfalama (Pagination) Kontrolleri */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="text-slate-500">
+                      Toplam {filteredFunds.length} fon • Sayfa {safePage}/{totalPages}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={safePage <= 1}
+                        onClick={() => setFundsTablePage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 font-bold"
+                      >
+                        &larr; Önceki
+                      </button>
+                      <button
+                        type="button"
+                        disabled={safePage >= totalPages}
+                        onClick={() => setFundsTablePage((p) => Math.min(totalPages, p + 1))}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 font-bold"
+                      >
+                        Sonraki &rarr;
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
-      {/* SEKME 5: TÜBİTAK 2209-A ARAŞTIRMA KILAVUZU, VERİ METODOLOJİSİ VE DIŞA AKTARMA (GÖREV 6) */}
-      {activeTab === "research" && (
-        <div className="space-y-6">
+      {/* KATEGORİ 4 ALT BÖLÜM: TÜBİTAK 2209-A ARAŞTIRMA KILAVUZU, VERİ METODOLOJİSİ VE DIŞA AKTARMA */}
+      {mainCategory === "cat_tubitak" &&
+        (tubitakSubTab === "ALL" || tubitakSubTab === "SURVEY") && (
+        <div className="order-5 space-y-6">
           {/* Üst Başlık ve İndirme Butonları */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
@@ -3427,9 +3758,10 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 6: ANKET & AKADEMİK BULGULAR (TÜBİTAK 2209-A) */}
-      {activeTab === "survey" && (
-        <div className="space-y-6">
+      {/* KATEGORİ 4 — BÖLÜM 2: 📊 ANKET SONUÇLARI & GRAFİKLERİ (TÜBİTAK 2209-A) */}
+      {mainCategory === "cat_tubitak" &&
+        (tubitakSubTab === "ALL" || tubitakSubTab === "SURVEY") && (
+        <div className="order-3 space-y-6">
           {/* Üst Başlık & Aksiyon Çubuğu */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -3811,9 +4143,9 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 7: YASAL METİNLER & SÖZLEŞMELER (SPK, KULLANIM KOŞULLARI, KVKK, TÜBİTAK ONAMI, METODOLOJİ — GÖREV 4) */}
-      {activeTab === "legal" && (
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
+      {/* KATEGORİ 3 ALT SEKME 2: ⚖️ SPK KANITLARI & YASAL METİNLER (SPKn Md. 52-53, KVKK, TÜBİTAK ONAMI) */}
+      {mainCategory === "cat_content" && contentSubTab === "spk_legal" && (
+        <div className="order-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1.5">
@@ -3957,9 +4289,9 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 7: GELEN MESAJLAR (İLETİŞİM & GERİ BİLDİRİM) */}
-      {activeTab === "inbox" && (
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
+      {/* KATEGORİ 5: 📬 5. GELEN KUTUSU & ZİYARETÇİ MESAJLARI (/contact) */}
+      {mainCategory === "cat_inbox" && (
+        <div className="order-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-1.5">
@@ -4194,9 +4526,10 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME 8: PLATFORM İSTATİSTİKLERİ & KULLANICI DAVRANIŞ ANALİZİ (TELEMETRİ ENGINE) */}
-      {activeTab === "telemetry" && (
-        <div className="space-y-6">
+      {/* KATEGORİ 4 — BÖLÜM 3: 👁️ FON VE MODÜL TIKLAMA TELEMETRİSİ */}
+      {mainCategory === "cat_tubitak" &&
+        (tubitakSubTab === "ALL" || tubitakSubTab === "TELEMETRY") && (
+        <div className="order-4 space-y-6">
           {/* Üst Özet Kartları */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -5112,9 +5445,9 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME: SİBER GÜVENLİK & TRAFİK KALKANI (NEON POSTGRESQL + POOL + CACHE + WAF) */}
-      {activeTab === "security" && (
-        <div className="space-y-6">
+      {/* KATEGORİ 6 — KART 3: 🛡️ SİBER GÜVENLİK & BRUTE-FORCE KALKANI */}
+      {mainCategory === "cat_settings" && (
+        <div className="order-3 space-y-6">
           <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-800/60 space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
@@ -5369,8 +5702,9 @@ export default function AdminHubView({
         </div>
       )}
 
-      {/* SEKME (MODÜL 9): OTOMATİK TÜBİTAK 2209-A RAPOR BULGULARI & AKADEMİK METİN ÜRETİCİ */}
-      {activeTab === "tubitak_report" && (() => {
+      {/* KATEGORİ 4 — BÖLÜM 1 (EN ÜSTTE): 📝 OTOMATİK TÜBİTAK RAPOR BULGULARI ÜRETİCİ */}
+      {mainCategory === "cat_tubitak" &&
+        (tubitakSubTab === "ALL" || tubitakSubTab === "REPORT") && (() => {
         const nParticipants = Number(surveyAnalytics?.total_participants || 45);
         const meanLit = Number(surveyAnalytics?.avg_literacy_score || 68.4);
         const stdDevLit = Number(surveyAnalytics?.std_dev_literacy_score || 14.2);
@@ -5449,7 +5783,7 @@ ${para3}
         };
 
         return (
-          <div className="space-y-6">
+          <div className="order-2 space-y-6">
             <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-950 via-blue-950 to-slate-900 text-white border border-indigo-800/60 space-y-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -5675,8 +6009,8 @@ ${para3}
         );
       })()}
 
-      {/* SEKME: 🛡️ CANLI TEFAS VERİ DOĞRULAMA VE KANIT RADARI */}
-      {activeTab === "tefas_verification" && (() => {
+      {/* KATEGORİ 2: ✅ 2. TEFAS VERİ DOĞRULUK & KANIT RADARI */}
+      {mainCategory === "cat_verification" && (() => {
         const items: any[] = Array.isArray(verificationRadar?.funds)
           ? verificationRadar.funds
           : fundsList.map((f: any) => ({
@@ -5719,7 +6053,7 @@ ${para3}
         });
 
         return (
-          <div className="space-y-6">
+          <div className="order-2 space-y-6">
             {/* Üst Bilgi & Otomatik Veri Bütünlüğü Kontrolleri Kartı */}
             <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -5946,6 +6280,8 @@ ${para3}
           </div>
         );
       })()}
+        </div>
+      </div>
     </div>
   );
 }

@@ -130,6 +130,16 @@ export default function AnalyticsPage() {
     });
     if (typeof window !== "undefined") {
       const sp = new URLSearchParams(window.location.search);
+      const qTab = (sp.get("tab") || "").trim().toUpperCase();
+      if (
+        qTab === "PERF_HEATMAP" ||
+        qTab === "REAL_RETURN" ||
+        qTab === "RISK_UNDERWATER" ||
+        qTab === "BEHAVIORAL" ||
+        qTab === "AUDIT_RADAR"
+      ) {
+        setActiveLabTab(qTab as any);
+      }
       const qFund = (sp.get("fund") || "").trim().toUpperCase();
       if (qFund) {
         const nextCodes = Array.from(new Set([qFund, "AFT", "MAC", "TTA", "TI1"]));

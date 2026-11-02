@@ -30,6 +30,17 @@ export default function TransparencyPage() {
     apiFetch<any>("/api/funds").then((res) => {
       if (res?.funds) setFundsList(res.funds);
     });
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const qTab = (sp.get("tab") || "").trim().toUpperCase();
+      if (qTab === "SCORES_SPK" || qTab === "STYLE_DRIFT" || qTab === "KATILIM_ESG") {
+        setActiveTab(qTab as any);
+      }
+      const qFund = (sp.get("fund") || "").trim().toUpperCase();
+      if (qFund) {
+        setSelectedFund(qFund);
+      }
+    }
   }, []);
 
   useEffect(() => {
