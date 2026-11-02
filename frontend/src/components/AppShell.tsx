@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -21,6 +21,7 @@ import {
   GraduationCap,
   Megaphone,
   ArrowRight,
+  Home,
 } from "lucide-react";
 import { API_BASE_URL, apiFetch, trackTelemetryEvent } from "@/lib/api";
 import FloatingQuickPoll from "@/components/FloatingQuickPoll";
@@ -75,8 +76,10 @@ const NAV_ITEMS = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [darkMode, setDarkMode] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"landing" | "dashboard">("landing");
   const [branding, setBranding] = useState({
     site_title: "Fon Güven & Şeffaflık",
     site_subtitle: "TÜBİTAK 2209-A Araştırma Platformu",
@@ -128,6 +131,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const handleBrandingEvent = () => loadBrandingAndSync();
     window.addEventListener("branding-updated", handleBrandingEvent);
 
+    const handleViewModeEvent = (ev: Event) => {
+      const customEv = ev as CustomEvent<"landing" | "dashboard">;
+      if (customEv.detail === "landing" || customEv.detail === "dashboard") {
+        setViewMode(customEv.detail);
+        try {
+          sessionStorage.setItem("fg_view_mode", customEv.detail);
+        } catch {}
+      }
+    };
+    window.addEventListener("set-view-mode", handleViewModeEvent);
+
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("view") === "dashboard") {
+        setViewMode("dashboard");
+        sessionStorage.setItem("fg_view_mode", "dashboard");
+      } else if (sp.get("view") === "landing") {
+        setViewMode("landing");
+        sessionStorage.setItem("fg_view_mode", "landing");
+      } else {
+        const storedMode = sessionStorage.getItem("fg_view_mode");
+        if (storedMode === "dashboard") {
+          setViewMode("dashboard");
+        }
+      }
+    } catch {}
+
     // Render Free Tier Uyku Önleyici (Keep-Alive: Her 10 dakikada bir /api/health ping)
     const keepAliveTimer = window.setInterval(() => {
       apiFetch<any>("/api/health").catch(() => {});
@@ -135,6 +165,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     return () => {
       window.removeEventListener("branding-updated", handleBrandingEvent);
+      window.removeEventListener("set-view-mode", handleViewModeEvent);
       window.clearInterval(keepAliveTimer);
     };
   }, []);
@@ -201,12 +232,57 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       : `${API_BASE_URL}${branding.site_logo_url}`
     : "";
 
+  const returnToLanding = () => {
+    setMobileOpen(false);
+    setViewMode("landing");
+    try {
+      sessionStorage.setItem("fg_view_mode", "landing");
+    } catch {}
+    window.dispatchEvent(new CustomEvent("set-view-mode", { detail: "landing" }));
+    if (pathname !== "/") {
+      router.push("/?view=landing");
+    }
+  };
+
+  const enterDashboard = () => {
+    setMobileOpen(false);
+    setViewMode("dashboard");
+    try {
+      sessionStorage.setItem("fg_view_mode", "dashboard");
+    } catch {}
+    window.dispatchEvent(new CustomEvent("set-view-mode", { detail: "dashboard" }));
+  };
+
+  // Kullanıcı "/" (Ana Sayfa) üzerinde ve "landing" (Tanıtım Vitrini) modundaysa Sol Menü (Sidebar) ve App Header gizlenir
+  const isLandingFullscreen = pathname === "/" && viewMode === "landing";
+
+  if (isLandingFullscreen) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Masaüstü Yan Menü (Sidebar) */}
       <aside className="hidden lg:flex lg:flex-col lg:w-72 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-        <div className="p-5 border-b border-slate-200 dark:border-slate-800">
-          <Link href="/" className="flex items-center gap-2.5">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
+          {/* Sol Menünün En Üstü: 🏠 Tanıtım Ekranına Dön Butonu (BÖLÜM 1) */}
+          <button
+            type="button"
+            onClick={returnToLanding}
+            className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600/10 via-blue-600/10 to-emerald-600/10 dark:from-indigo-500/20 dark:via-blue-500/20 dark:to-emerald-500/20 border border-indigo-200 dark:border-indigo-800/80 hover:border-indigo-400 text-xs font-extrabold text-indigo-700 dark:text-indigo-300 transition-all shadow-sm group"
+          >
+            <span className="flex items-center gap-2">
+              <Home className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>🏠 Tanıtım Ekranına Dön</span>
+            </span>
+            <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+
+          <Link href="/dashboard" className="flex items-center gap-2.5">
             {resolvedLogoSrc ? (
               <img
                 src={resolvedLogoSrc}
@@ -232,11 +308,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active = pathname === item.href || (item.href === "/" && pathname === "/dashboard");
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={enterDashboard}
                 className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                   active
                     ? "bg-blue-600 text-white shadow-sm"
@@ -304,24 +381,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <aside className="relative w-72 max-w-[85vw] bg-white dark:bg-slate-900 h-full flex flex-col z-10 p-4">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
-              <span className="font-bold text-sm">{branding.site_title}</span>
+            <div className="pb-3 border-b border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm">{branding.site_title}</span>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               <button
-                onClick={() => setMobileOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                type="button"
+                onClick={returnToLanding}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-xs font-extrabold text-indigo-700 dark:text-indigo-300"
               >
-                <X className="w-5 h-5" />
+                <span>🏠 Tanıtım Ekranına Dön</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
             <nav className="flex-1 py-3 space-y-1 overflow-y-auto">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const active = pathname === item.href;
+                const active = pathname === item.href || (item.href === "/" && pathname === "/dashboard");
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={enterDashboard}
                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium ${
                       active
                         ? "bg-blue-600 text-white"
