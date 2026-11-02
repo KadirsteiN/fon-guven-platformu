@@ -35,6 +35,9 @@ export default function BasketsPage() {
   ]);
   const [simResult, setSimResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [activeRightTab, setActiveRightTab] = useState<"SIM_CHART" | "CORRELATION" | "REAL_RETURN">(
+    "SIM_CHART"
+  );
 
   const runSimulation = async (customStart?: string, customEnd?: string) => {
     const sDate = customStart || startDate;
@@ -244,17 +247,17 @@ export default function BasketsPage() {
   }, [allocations, simResult]);
 
   return (
-    <div className="space-y-6">
-      {/* Başlık */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+    <div className="space-y-4">
+      {/* Üst Başlık Bandı */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full mb-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-full mb-1">
               <Briefcase className="w-3.5 h-3.5" />
-              Sanal Sepet Laboratuvarı • Portföy Simülasyon ve Katkı Payı Merkezi
+              Sanal Sepet Laboratuvarı • Portföy Simülasyon ve Korelasyon Merkezi
             </span>
-            <h2 className="text-xl font-bold">
-              Özel TL Tutarlarıyla Sanal Sepet Kurulumu ve Katkı Payı Analizi
+            <h2 className="text-lg sm:text-xl font-bold">
+              Özel TL Tutarlarıyla Sanal Sepet Kurulumu, Katkı Payı ve Korelasyon ($r$) Analizi
             </h2>
           </div>
           <span className="text-xs px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold">
@@ -263,467 +266,488 @@ export default function BasketsPage() {
         </div>
       </div>
 
-      {/* Sepet Kurulum Formu */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-            Hızlı Dönem Seçimi (Bugünün Tarihinden Geriye Doğru):
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[
-              { label: "1 Ay", months: 1 },
-              { label: "3 Ay", months: 3 },
-              { label: "6 Ay", months: 6 },
-              { label: "1 Yıl", months: 12 },
-            ].map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => applyQuickPeriod(p.months)}
-                className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-indigo-600 hover:text-white dark:bg-slate-800 dark:hover:bg-indigo-600 text-xs font-bold transition-colors"
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-              Sanal Sepet Adı:
-            </label>
-            <input
-              type="text"
-              value={basketName}
-              onChange={(e) => setBasketName(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-              Başlangıç Tarihi:
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-              Bitiş Tarihi (Varsayılan: Bugün):
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-            />
-          </div>
-        </div>
-
-        {/* Fon Kalemleri */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              Sepetteki Fonlar ve Başlangıç Yatırım Tutarları (TL):
+      {/* YAN YANA 2 SÜTUNLU MİMARİ: SOL = SEPET OLUŞTURUCU, SAĞ = SİMÜLASYON & KORELASYON SONUÇLARI */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* SOL SÜTUN (4/12): SEPET KURULUM FORMU */}
+        <div className="lg:col-span-4 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 lg:sticky lg:top-20">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              🛠️ Sepet Oluşturucu
             </span>
-            <button
-              onClick={addRow}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 inline-flex items-center gap-1 hover:underline"
-            >
-              <Plus className="w-3.5 h-3.5" /> Fon Ekle
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {allocations.map((item, idx) => (
-              <div
-                key={idx}
-                className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center gap-2"
-              >
-                <select
-                  value={item.fund_code}
-                  onChange={(e) =>
-                    updateAllocation(idx, "fund_code", e.target.value)
-                  }
-                  className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
-                >
-                  {availableFunds.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={item.amount_tl}
-                  min={100}
-                  step={1000}
-                  onChange={(e) =>
-                    updateAllocation(
-                      idx,
-                      "amount_tl",
-                      Number(e.target.value) || 0
-                    )
-                  }
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
-                />
+            <div className="flex flex-wrap items-center gap-1">
+              {[
+                { label: "1 Ay", months: 1 },
+                { label: "3 Ay", months: 3 },
+                { label: "6 Ay", months: 6 },
+                { label: "1 Yıl", months: 12 },
+              ].map((p) => (
                 <button
-                  onClick={() => removeRow(idx)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600"
-                  title="Kaldır"
+                  key={p.label}
+                  type="button"
+                  onClick={() => applyQuickPeriod(p.months)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-600 hover:text-white dark:bg-slate-800 dark:hover:bg-indigo-600 text-[11px] font-bold transition-colors"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {p.label}
                 </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                Sanal Sepet Adı:
+              </label>
+              <input
+                type="text"
+                value={basketName}
+                onChange={(e) => setBasketName(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                  Başlangıç:
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                  Bitiş:
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Fon Kalemleri */}
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                Sepetteki Fonlar &amp; Tutar (TL):
+              </span>
+              <button
+                onClick={addRow}
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 inline-flex items-center gap-1 hover:underline"
+              >
+                <Plus className="w-3.5 h-3.5" /> Fon Ekle
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {allocations.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center gap-2"
+                >
+                  <select
+                    value={item.fund_code}
+                    onChange={(e) =>
+                      updateAllocation(idx, "fund_code", e.target.value)
+                    }
+                    className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                  >
+                    {availableFunds.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    value={item.amount_tl}
+                    min={100}
+                    step={1000}
+                    onChange={(e) =>
+                      updateAllocation(
+                        idx,
+                        "amount_tl",
+                        Number(e.target.value) || 0
+                      )
+                    }
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                  />
+                  <button
+                    onClick={() => removeRow(idx)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600"
+                    title="Kaldır"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <button
             onClick={() => runSimulation()}
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+            className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 shadow-sm transition-colors"
           >
             <Play className="w-3.5 h-3.5" />
             {loading ? "Simüle Ediliyor..." : "Sepeti Anlık Simüle Et"}
           </button>
+
+          {/* Kompakt Yasal Koruma Notu */}
+          <div className="p-3 rounded-xl bg-amber-50/75 dark:bg-slate-800/70 border border-amber-200 dark:border-slate-700 text-[11px] text-amber-900 dark:text-slate-300 leading-snug">
+            <strong>Simülasyon Notu:</strong> Sonuçlar geçmiş gerçek TEFAS fiyatlarına dayalı teorik senaryodur; yatırım tavsiyesi değildir (YTD).
+          </div>
         </div>
-      </div>
 
-      {simResult && (
-        <>
-          {/* KPI Kartları */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500">
-                Toplam Başlangıç Tutarı
-              </div>
-              <div className="text-xl font-bold mt-1 font-mono">
-                {formatCurrencyTL(simResult.total_initial_amount_tl)}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                İşlem Günü: {simResult.actual_start_date}
-              </div>
-            </div>
+        {/* SAĞ SÜTUN (8/12): SİMÜLASYON SONUÇLARI, KORELASYON MATRİSİ VE REEL GETİRİ */}
+        <div className="lg:col-span-8 space-y-4">
+          {simResult && (
+            <>
+              {/* 4 KPI Kartı */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="text-[11px] text-slate-500">
+                    Başlangıç Sermayesi
+                  </div>
+                  <div className="text-base sm:text-lg font-bold mt-0.5 font-mono">
+                    {formatCurrencyTL(simResult.total_initial_amount_tl)}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    {simResult.actual_start_date}
+                  </div>
+                </div>
 
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500">
-                Dönem Sonu Sepet Değeri
-              </div>
-              <div className="text-xl font-bold mt-1 font-mono text-blue-600 dark:text-blue-400">
-                {formatCurrencyTL(simResult.total_final_value_tl)}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                İşlem Günü: {simResult.actual_end_date} (
-                {simResult.trading_days_count} gün)
-              </div>
-            </div>
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="text-[11px] text-slate-500">
+                    Dönem Sonu Değer
+                  </div>
+                  <div className="text-base sm:text-lg font-bold mt-0.5 font-mono text-blue-600 dark:text-blue-400">
+                    {formatCurrencyTL(simResult.total_final_value_tl)}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    {simResult.actual_end_date} ({simResult.trading_days_count} gün)
+                  </div>
+                </div>
 
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500">
-                Toplam Net Brüt Kâr / Zarar
-              </div>
-              <div
-                className={`text-xl font-bold mt-1 font-mono ${
-                  simResult.total_net_profit_tl >= 0
-                    ? "text-emerald-600"
-                    : "text-rose-600"
-                }`}
-              >
-                {simResult.total_net_profit_tl >= 0 ? "+" : ""}
-                {formatCurrencyTL(simResult.total_net_profit_tl)} (
-                {simResult.weighted_return_pct >= 0 ? "+" : ""}
-                {formatNumberTR(simResult.weighted_return_pct)}%)
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                100 Bazlı Bitiş: {formatNumberTR(simResult.normalized_base_100_end)}
-              </div>
-            </div>
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="text-[11px] text-slate-500">
+                    Toplam Brüt Kâr / Zarar
+                  </div>
+                  <div
+                    className={`text-base sm:text-lg font-bold mt-0.5 font-mono ${
+                      simResult.total_net_profit_tl >= 0
+                        ? "text-emerald-600"
+                        : "text-rose-600"
+                    }`}
+                  >
+                    {simResult.total_net_profit_tl >= 0 ? "+" : ""}
+                    {formatNumberTR(simResult.weighted_return_pct)}%
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                    {simResult.total_net_profit_tl >= 0 ? "+" : ""}
+                    {formatCurrencyTL(simResult.total_net_profit_tl)}
+                  </div>
+                </div>
 
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="text-xs text-slate-500">
-                Sepet Max Drawdown & Volatilite
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="text-[11px] text-slate-500">
+                    Max Drawdown &amp; Volatilite
+                  </div>
+                  <div className="text-base sm:text-lg font-bold mt-0.5 font-mono text-rose-600">
+                    -{formatNumberTR(simResult.basket_max_drawdown_pct)}%
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    Vol: {formatNumberTR(simResult.basket_annualized_volatility_pct)}%
+                  </div>
+                </div>
               </div>
-              <div className="text-xl font-bold mt-1 font-mono text-rose-600">
-                -{formatNumberTR(simResult.basket_max_drawdown_pct)}%
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                Yıllık Volatilite:{" "}
-                {formatNumberTR(simResult.basket_annualized_volatility_pct)}%
-              </div>
-            </div>
-          </div>
 
-          {/* Sepet Sonuç Kartı Altı Yasal Koruma Alanı (GÖREV 3.2) */}
-          <div className="p-3.5 rounded-xl bg-amber-50/75 dark:bg-blue-950/30 border border-amber-300 dark:border-blue-800/80 flex items-center gap-2.5 text-xs text-amber-900 dark:text-blue-200 font-medium">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-blue-400 shrink-0" />
-            <span>
-              Bu simülasyon bir yatırım veya portföy dağılım tavsiyesi değildir. Sonuçlar teorik olup işlem valörü (T+1/T+2), stopaj vergisi kesintileri ve piyasa oynaklığı hesaba katılmamıştır.
-            </span>
-          </div>
-
-          {/* Günlük Sepet Değeri Grafiği */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-            <h3 className="text-base font-bold">
-              Günlük Sepet Toplam Değeri (TL) Zaman Serisi
-            </h3>
-            <SvgLineChart
-              data={chartData}
-              xKey="date"
-              series={[
-                {
-                  key: "total_value_tl",
-                  label: "Sepet Toplam Değeri (TL)",
-                  color: "#2563eb",
-                },
-              ]}
-              yUnit=" TL"
-              referenceLineValue={simResult.total_initial_amount_tl}
-              referenceLineLabel="Başlangıç Sermayesi"
-            />
-          </div>
-
-          {/* Fon Bazlı Katkı Payı Kırılım Tablosu */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-            <h3 className="text-base font-bold mb-4">
-              Fon Bazlı Alınan Pay Adedi, Bireysel Getiri ve Toplam Sepet Kâr/Zararına Katkı Tablosu
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                    <th className="py-2.5 pr-4">Fon</th>
-                    <th className="py-2.5 px-4 text-right">Başlangıç TL</th>
-                    <th className="py-2.5 px-4 text-right">Sepet Ağırlığı</th>
-                    <th className="py-2.5 px-4 text-right">Alınan Pay Adedi</th>
-                    <th className="py-2.5 px-4 text-right">Bitiş Değeri TL</th>
-                    <th className="py-2.5 px-4 text-right">Fon Getirisi</th>
-                    <th className="py-2.5 px-4 text-right">Net Katkı (TL)</th>
-                    <th className="py-2.5 pl-4 text-right">
-                      Toplam Kâr Payı (%)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {simResult.items_breakdown?.map((item: any) => {
-                    const pos = item.profit_contribution_tl >= 0;
+              {/* SAĞ SÜTUN SEKMELERİ (3 Kompakt Sekme) */}
+              <div className="p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  {[
+                    {
+                      id: "SIM_CHART",
+                      label: "📊 Sepet Grafiği & Katkı Payı Tablosu",
+                    },
+                    {
+                      id: "CORRELATION",
+                      label: "🧩 Korelasyon Matrisi (r) & Overlap",
+                    },
+                    {
+                      id: "REAL_RETURN",
+                      label: "💰 Sepet Reel Getiri & Benchmark",
+                    },
+                  ].map((t) => {
+                    const isActive = activeRightTab === t.id;
                     return (
-                      <tr key={item.fund_code}>
-                        <td className="py-3 pr-4 font-bold text-blue-600 dark:text-blue-400">
-                          {item.fund_code}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono">
-                          {formatCurrencyTL(item.initial_amount_tl)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono">
-                          %{formatNumberTR(item.initial_weight_pct)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono">
-                          {formatNumberTR(item.shares, 4)} pay
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold">
-                          {formatCurrencyTL(item.final_value_tl)}
-                        </td>
-                        <td
-                          className={`py-3 px-4 text-right font-mono font-bold ${
-                            item.individual_return_pct >= 0
-                              ? "text-emerald-600"
-                              : "text-rose-600"
-                          }`}
-                        >
-                          {item.individual_return_pct >= 0 ? "+" : ""}
-                          {formatNumberTR(item.individual_return_pct)}%
-                        </td>
-                        <td
-                          className={`py-3 px-4 text-right font-mono font-bold ${
-                            pos ? "text-emerald-600" : "text-rose-600"
-                          }`}
-                        >
-                          {pos ? "+" : ""}
-                          {formatCurrencyTL(item.profit_contribution_tl)}
-                        </td>
-                        <td className="py-3 pl-4 text-right font-mono">
-                          {pos ? "+" : ""}
-                          {formatNumberTR(item.profit_contribution_share_pct)}%
-                        </td>
-                      </tr>
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setActiveRightTab(t.id as any)}
+                        className={`px-3 py-2 rounded-xl text-xs font-extrabold transition-all text-center ${
+                          isActive
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : "bg-slate-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
                     );
                   })}
-            </tbody>
-          </table>
+                </div>
+              </div>
+
+              {/* SAĞ SEKME 1: 📊 Sepet Grafiği & Katkı Payı Tablosu */}
+              {activeRightTab === "SIM_CHART" && (
+                <div className="space-y-4">
+                  <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <h3 className="text-sm sm:text-base font-bold">
+                      Günlük Sepet Toplam Değeri (TL) Zaman Serisi
+                    </h3>
+                    <SvgLineChart
+                      data={chartData}
+                      xKey="date"
+                      series={[
+                        {
+                          key: "total_value_tl",
+                          label: "Sepet Toplam Değeri (TL)",
+                          color: "#2563eb",
+                        },
+                      ]}
+                      yUnit=" TL"
+                      referenceLineValue={simResult.total_initial_amount_tl}
+                      referenceLineLabel="Başlangıç Sermayesi"
+                    />
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <h3 className="text-sm sm:text-base font-bold mb-3">
+                      Fon Bazlı Alınan Pay Adedi, Bireysel Getiri ve Toplam Sepet Kârına Katkı Tablosu
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                            <th className="py-2 pr-3">Fon</th>
+                            <th className="py-2 px-3 text-right">Başlangıç TL</th>
+                            <th className="py-2 px-3 text-right">Ağırlık</th>
+                            <th className="py-2 px-3 text-right">Pay Adedi</th>
+                            <th className="py-2 px-3 text-right">Bitiş TL</th>
+                            <th className="py-2 px-3 text-right">Getiri</th>
+                            <th className="py-2 px-3 text-right">Net Katkı (TL)</th>
+                            <th className="py-2 pl-3 text-right">Kâr Payı (%)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                          {simResult.items_breakdown?.map((item: any) => {
+                            const pos = item.profit_contribution_tl >= 0;
+                            return (
+                              <tr key={item.fund_code}>
+                                <td className="py-2.5 pr-3 font-bold text-blue-600 dark:text-blue-400">
+                                  {item.fund_code}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono">
+                                  {formatCurrencyTL(item.initial_amount_tl)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono">
+                                  %{formatNumberTR(item.initial_weight_pct)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono">
+                                  {formatNumberTR(item.shares, 2)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono font-semibold">
+                                  {formatCurrencyTL(item.final_value_tl)}
+                                </td>
+                                <td
+                                  className={`py-2.5 px-3 text-right font-mono font-bold ${
+                                    item.individual_return_pct >= 0
+                                      ? "text-emerald-600"
+                                      : "text-rose-600"
+                                  }`}
+                                >
+                                  {item.individual_return_pct >= 0 ? "+" : ""}
+                                  {formatNumberTR(item.individual_return_pct)}%
+                                </td>
+                                <td
+                                  className={`py-2.5 px-3 text-right font-mono font-bold ${
+                                    pos ? "text-emerald-600" : "text-rose-600"
+                                  }`}
+                                >
+                                  {pos ? "+" : ""}
+                                  {formatCurrencyTL(item.profit_contribution_tl)}
+                                </td>
+                                <td className="py-2.5 pl-3 text-right font-mono">
+                                  {pos ? "+" : ""}
+                                  {formatNumberTR(item.profit_contribution_share_pct)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SAĞ SEKME 2: 🧩 Korelasyon Matrisi (r) & Overlap */}
+              {activeRightTab === "CORRELATION" && correlationAnalysis && (
+                <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-full">
+                        <Grid className="w-3.5 h-3.5" />
+                        Markowitz Portföy Teorisi • Pearson Korelasyon Matrisi (r)
+                      </span>
+                      <h3 className="text-base font-bold">
+                        Sahte Çeşitlendirme (Overlap) ve Korelasyon Isı Haritası
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        İki fon arasında <strong>r &gt; 0.80</strong> olması sahte çeşitlendirme (overlap) riskini gösterir.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shrink-0">
+                      <div className="text-right">
+                        <div className="text-[11px] text-slate-500 font-semibold">
+                          Çeşitlendirme Skoru
+                        </div>
+                        <div
+                          className={`text-xs font-extrabold ${
+                            correlationAnalysis.diversificationScore >= 75
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : correlationAnalysis.diversificationScore >= 50
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-rose-600 dark:text-rose-400"
+                          }`}
+                        >
+                          {correlationAnalysis.diversificationScore >= 75
+                            ? "🟢 Yüksek Kaliteli"
+                            : correlationAnalysis.diversificationScore >= 50
+                            ? "🟡 Orta Düzey"
+                            : "🔴 Overlap Riskli"}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Ort. r = {formatNumberTR(correlationAnalysis.avgCorr, 2)}
+                        </div>
+                      </div>
+                      <div
+                        className={`w-14 h-14 rounded-2xl text-white flex flex-col items-center justify-center font-extrabold shadow-sm ${
+                          correlationAnalysis.diversificationScore >= 75
+                            ? "bg-emerald-600"
+                            : correlationAnalysis.diversificationScore >= 50
+                            ? "bg-amber-500"
+                            : "bg-rose-600"
+                        }`}
+                      >
+                        <span className="text-base">
+                          {correlationAnalysis.diversificationScore}
+                        </span>
+                        <span className="text-[9px] opacity-85">/ 100</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {correlationAnalysis.highOverlapPairs.length > 0 ? (
+                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-400 dark:border-rose-700 space-y-1">
+                      {correlationAnalysis.highOverlapPairs.map((pair) => (
+                        <div
+                          key={`${pair.f1}_${pair.f2}`}
+                          className="flex items-start gap-2 text-xs text-rose-900 dark:text-rose-200 font-semibold"
+                        >
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>⚠️ Sahte Çeşitlendirme (Overlap):</strong>{" "}
+                            <strong>{pair.f1}</strong> ve <strong>{pair.f2}</strong> fonları aynı yönde hareket etmektedir (<strong>r = {formatNumberTR(pair.r, 2)}</strong>).
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        ✅ <strong>Gerçek Risk Dağılımı Doğrulandı:</strong> Kritik binişme eşiği (<code>r &gt; 0.80</code>) bulunmamaktadır (Ort: <strong>r = {formatNumberTR(correlationAnalysis.avgCorr, 2)}</strong>).
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-center border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                          <th className="p-2.5 text-left font-bold text-slate-500">
+                            Fon Kodu (r Matrisi)
+                          </th>
+                          {correlationAnalysis.codes.map((c) => (
+                            <th key={c} className="p-2.5 font-mono font-extrabold text-blue-600 dark:text-blue-400">
+                              {c}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {correlationAnalysis.codes.map((rowCode) => (
+                          <tr key={rowCode}>
+                            <td className="p-2.5 text-left font-mono font-extrabold text-blue-600 dark:text-blue-400 bg-slate-50/60 dark:bg-slate-800/40">
+                              {rowCode}
+                            </td>
+                            {correlationAnalysis.codes.map((colCode) => {
+                              const val = correlationAnalysis.matrix[rowCode]?.[colCode] ?? 0;
+                              const isDiag = rowCode === colCode;
+                              const isHigh = !isDiag && val > 0.8;
+                              const isMed = !isDiag && val > 0.5 && val <= 0.8;
+                              const cellClass = isDiag
+                                ? "bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                                : isHigh
+                                ? "bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-200 font-extrabold"
+                                : isMed
+                                ? "bg-amber-100/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 font-bold"
+                                : "bg-emerald-100/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-bold";
+
+                              return (
+                                <td key={colCode} className={`p-2.5 font-mono ${cellClass}`}>
+                                  {formatNumberTR(val, 2)}
+                                  {isHigh && (
+                                    <span className="block text-[9px] font-bold text-rose-600 dark:text-rose-300">
+                                      OVERLAP
+                                    </span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* SAĞ SEKME 3: 💰 Sepet Reel Getiri & Küresel Benchmark Simülatörü */}
+              {activeRightTab === "REAL_RETURN" && (
+                <RealReturnSimulator
+                  fundCodes={allocations.map((a) => a.fund_code)}
+                  weightsPct={simResult.items_breakdown?.map((item: any) => item.initial_weight_pct)}
+                  startDate={simResult.actual_start_date || startDate}
+                  endDate={simResult.actual_end_date || endDate}
+                  defaultAmount={simResult.total_initial_amount_tl || 100000}
+                  periodReturnPct={simResult.weighted_return_pct}
+                  dailySeries={simResult.daily_series}
+                  defaultOpen={true}
+                />
+              )}
+            </>
+          )}
         </div>
       </div>
-
-      {/* MODÜL 4: Sanal Sepet Korelasyon (r) Isı Haritası ve Sahte Çeşitlendirme (Overlap) Analizi */}
-      {correlationAnalysis && (
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full">
-                <Grid className="w-3.5 h-3.5" />
-                Modern Portföy Teorisi (Markowitz) • Pearson Korelasyon Matrisi (r) ve Sahte Çeşitlendirme Analizi
-              </span>
-              <h3 className="text-base sm:text-lg font-bold">
-                Sepetinizdeki Fonlar Gerçekten Birbirini Dengeliyor mu, Yoksa Aynı Yönde mi Hareket Ediyor?
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Günlük fiyat değişimleri üzerinden hesaplanan Pearson korelasyon katsayısı (<code>r</code>) -1 ile +1 arasındadır. İki fon arasında <strong>r &gt; 0.80</strong> olması sahte çeşitlendirme (overlap) riskini gösterir.
-              </p>
-            </div>
-
-            {/* Çeşitlendirme Kalitesi Skoru (0-100) */}
-            <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shrink-0">
-              <div className="text-right">
-                <div className="text-[11px] text-slate-500 font-semibold">
-                  Çeşitlendirme Kalitesi Skoru
-                </div>
-                <div
-                  className={`text-sm font-extrabold ${
-                    correlationAnalysis.diversificationScore >= 75
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : correlationAnalysis.diversificationScore >= 50
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-rose-600 dark:text-rose-400"
-                  }`}
-                >
-                  {correlationAnalysis.diversificationScore >= 75
-                    ? "🟢 Yüksek Kaliteli Dağılım"
-                    : correlationAnalysis.diversificationScore >= 50
-                    ? "🟡 Orta Düzey Çeşitlendirme"
-                    : "🔴 Zayıf / Overlap Riskli"}
-                </div>
-                <div className="text-[10px] text-slate-500 font-mono">
-                  Ort. Korelasyon: r = {formatNumberTR(correlationAnalysis.avgCorr, 2)}
-                </div>
-              </div>
-              <div
-                className={`w-16 h-16 rounded-2xl text-white flex flex-col items-center justify-center font-extrabold shadow-sm ${
-                  correlationAnalysis.diversificationScore >= 75
-                    ? "bg-emerald-600"
-                    : correlationAnalysis.diversificationScore >= 50
-                    ? "bg-amber-500"
-                    : "bg-rose-600"
-                }`}
-              >
-                <span className="text-lg">
-                  {correlationAnalysis.diversificationScore}
-                </span>
-                <span className="text-[9px] opacity-85">/ 100</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Sahte Çeşitlendirme (Overlap) Uyarısı veya Başarılı Dağılım Kutusu */}
-          {correlationAnalysis.highOverlapPairs.length > 0 ? (
-            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-700 space-y-1.5">
-              {correlationAnalysis.highOverlapPairs.map((pair) => (
-                <div
-                  key={`${pair.f1}_${pair.f2}`}
-                  className="flex items-start gap-2.5 text-xs text-rose-900 dark:text-rose-200 font-semibold"
-                >
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>⚠️ Sahte Çeşitlendirme (Overlap) Uyarısı:</strong>{" "}
-                    Seçtiğiniz <strong>{pair.f1}</strong> ve{" "}
-                    <strong>{pair.f2}</strong> fonları aynı yönde hareket etmektedir (
-                    <strong>r = {formatNumberTR(pair.r, 2)}</strong>), bu sepet gerçek bir risk dağılımı sağlamamaktadır.
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-semibold">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                ✅ <strong>Gerçek Risk Dağılımı Doğrulandı:</strong> Sepetinizdeki hiçbir fon çifti arasında kritik binişme eşiği (<code>r &gt; 0.80</code>) bulunmamaktadır (Ortalama korelasyon: <strong>r = {formatNumberTR(correlationAnalysis.avgCorr, 2)}</strong>).
-              </span>
-            </div>
-          )}
-
-          {/* Renkli Korelasyon Isı Haritası (Heatmap Tablosu) */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-center border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-                  <th className="p-3 text-left font-bold text-slate-500">
-                    Fon Kodu (r Matrisi)
-                  </th>
-                  {correlationAnalysis.codes.map((c) => (
-                    <th key={c} className="p-3 font-mono font-extrabold text-blue-600 dark:text-blue-400">
-                      {c}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {correlationAnalysis.codes.map((rowCode) => (
-                  <tr key={rowCode}>
-                    <td className="p-3 text-left font-mono font-extrabold text-blue-600 dark:text-blue-400 bg-slate-50/60 dark:bg-slate-800/40">
-                      {rowCode}
-                    </td>
-                    {correlationAnalysis.codes.map((colCode) => {
-                      const val = correlationAnalysis.matrix[rowCode]?.[colCode] ?? 0;
-                      const isDiag = rowCode === colCode;
-                      const isHigh = !isDiag && val > 0.8;
-                      const isMed = !isDiag && val > 0.5 && val <= 0.8;
-                      const cellClass = isDiag
-                        ? "bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
-                        : isHigh
-                        ? "bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-200 font-extrabold"
-                        : isMed
-                        ? "bg-amber-100/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 font-bold"
-                        : "bg-emerald-100/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-bold";
-
-                      return (
-                        <td key={colCode} className={`p-3 font-mono ${cellClass}`}>
-                          {formatNumberTR(val, 2)}
-                          {isHigh && (
-                            <span className="block text-[9px] font-bold text-rose-600 dark:text-rose-300">
-                              OVERLAP
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-          {/* Zorunlu Şeffaflık Uyarıları (limitations_notice) */}
-          <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 space-y-2 text-xs text-amber-900 dark:text-amber-200">
-            <div className="font-bold flex items-center gap-2 text-sm">
-              <AlertTriangle className="w-4 h-4" />
-              {simResult.limitations_notice?.simulation_badge}
-            </div>
-            <p className="font-semibold">
-              • Bu simülasyon bir yatırım veya portföy dağılım tavsiyesi değildir. Sonuçlar teorik olup işlem valörü (T+1/T+2), stopaj vergisi kesintileri ve piyasa oynaklığı hesaba katılmamıştır.
-            </p>
-            <p>• {simResult.limitations_notice?.past_performance_warning}</p>
-            <p>• {simResult.limitations_notice?.gross_calculation_warning}</p>
-            <p>• {simResult.limitations_notice?.management_fee_note}</p>
-          </div>
-
-          {/* İsteğe Bağlı Açılan Reel Getiri & Küresel Benchmark Simülatörü (GÖREV 2) */}
-          <RealReturnSimulator
-            fundCodes={allocations.map((a) => a.fund_code)}
-            weightsPct={simResult.items_breakdown?.map((item: any) => item.initial_weight_pct)}
-            startDate={simResult.actual_start_date || startDate}
-            endDate={simResult.actual_end_date || endDate}
-            defaultAmount={simResult.total_initial_amount_tl || 100000}
-            periodReturnPct={simResult.weighted_return_pct}
-            dailySeries={simResult.daily_series}
-          />
-        </>
-      )}
     </div>
   );
 }

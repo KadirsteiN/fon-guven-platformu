@@ -250,14 +250,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
-          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60">
+        <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+          {/* Sol Menü Tema Değiştirici (BÖLÜM 2) */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+            title="Açık / Koyu Tema Değiştir"
+          >
+            <span className="flex items-center gap-2">
+              {darkMode ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>☀️ Açık Tema</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>🌙 Koyu Tema</span>
+                </>
+              )}
+            </span>
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+              {darkMode ? "Koyu Aktif" : "Açık Aktif"}
+            </span>
+          </button>
+
+          <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60">
             <div className="flex items-center gap-1.5 font-semibold text-emerald-800 dark:text-emerald-300">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
               Gerçek Veri İlkesi Aktif
             </div>
-            <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400 leading-relaxed">
-              Tüm fon fiyatları canlı TEFAS/SQLite kayıtlarından; hukuki iddialar
+            <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-400 leading-snug">
+              Tüm fon fiyatları canlı TEFAS/PostgreSQL kayıtlarından; hukuki iddialar
               6362 sayılı SPKn ve SPK Tebliğlerinden beslenir.
             </p>
             {syncInfo?.database_state?.latest_price_date && (
@@ -309,6 +334,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 );
               })}
             </nav>
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200"
+              >
+                <span className="flex items-center gap-2">
+                  {darkMode ? (
+                    <>
+                      <Sun className="w-4 h-4 text-amber-400" />
+                      <span>☀️ Açık Tema</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-4 h-4 text-indigo-600" />
+                      <span>🌙 Koyu Tema</span>
+                    </>
+                  )}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {darkMode ? "Koyu Aktif" : "Açık Aktif"}
+                </span>
+              </button>
+            </div>
           </aside>
         </div>
       )}
@@ -340,7 +389,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Üst Bilgi Çubuğu (Header) */}
-        <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur px-4 lg:px-8 flex items-center justify-between sticky top-0 z-30">
+        <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur px-4 lg:px-6 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
@@ -370,26 +419,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <span className="hidden md:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium">
               SPKn Md. 52-53 & TEFAS Doğrulamalı
             </span>
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Açık / Koyu Tema Değiştir"
-            >
-              {darkMode ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-slate-600" />
-              )}
-            </button>
           </div>
         </header>
 
         {/* Sayfa İçeriği */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-7xl w-full mx-auto">
           {children}
         </main>
 

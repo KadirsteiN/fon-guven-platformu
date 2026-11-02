@@ -592,7 +592,7 @@ export default function SurveyPage() {
         };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="max-w-4xl mx-auto space-y-4 pb-8">
       {/* Görünmez Honeypot Bot Koruması */}
       <div className="hidden" aria-hidden="true">
         <label>
@@ -608,22 +608,22 @@ export default function SurveyPage() {
         </label>
       </div>
 
-      {/* ÜST 2 BÖLÜMLÜ SEKME YAPISI */}
+      {/* ÜST 2 BÖLÜMLÜ KOMPAKT SEKME YAPISI */}
       <div className="p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-2 shadow-sm">
         <button
           type="button"
           onClick={() => setActiveTab("tubitak_survey")}
-          className={`p-3.5 rounded-xl text-left transition-all flex items-center gap-3 ${
+          className={`p-3 rounded-xl text-left transition-all flex items-center gap-3 ${
             activeTab === "tubitak_survey"
-              ? "bg-blue-600 text-white shadow-md"
+              ? "bg-blue-600 text-white shadow-sm"
               : "bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
           }`}
         >
           <GraduationCap className="w-5 h-5 shrink-0" />
           <div>
-            <div className="text-[11px] font-bold opacity-85">1. Bölüm / Sekme</div>
+            <div className="text-[11px] font-bold opacity-85">1. Sekme • TÜBİTAK 2209-A</div>
             <div className="text-xs sm:text-sm font-extrabold">
-              TÜBİTAK 2209-A Finansal Okuryazarlık ve Fon Şeffaflık Algı Anketi
+              📊 Finansal Okuryazarlık Anketi
             </div>
           </div>
         </button>
@@ -631,17 +631,17 @@ export default function SurveyPage() {
         <button
           type="button"
           onClick={() => setActiveTab("spk_risk_test")}
-          className={`p-3.5 rounded-xl text-left transition-all flex items-center gap-3 ${
+          className={`p-3 rounded-xl text-left transition-all flex items-center gap-3 ${
             activeTab === "spk_risk_test"
-              ? "bg-teal-600 text-white shadow-md"
+              ? "bg-teal-600 text-white shadow-sm"
               : "bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100"
           }`}
         >
           <ShieldCheck className="w-5 h-5 shrink-0" />
           <div>
-            <div className="text-[11px] font-bold opacity-85">2. Bölüm / Sekme</div>
+            <div className="text-[11px] font-bold opacity-85">2. Sekme • SPK Uygunluk</div>
             <div className="text-xs sm:text-sm font-extrabold">
-              🛡️ SPK Kişisel Risk Profili ve Yatırımcı Uygunluk Testi (1-7 Ölçeği)
+              🛡️ SPK Kişisel Risk Profili Testi (1-7)
             </div>
           </div>
         </button>

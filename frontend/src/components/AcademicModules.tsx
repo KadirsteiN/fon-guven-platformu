@@ -2660,413 +2660,169 @@ export function MonthlyReturnsHeatmap({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// YENİ MODÜL 5: 🧭 İNTERAKTİF "30 SANİYEDE AKADEMİK FON SEÇİM SİHİRBAZI"
+// 10 YILLIK YÖNETİM ÜCRETİ BİLEŞİK ERİME KARTI (SEKME 1 İÇİN KOMPAKT MODÜL)
 // ─────────────────────────────────────────────────────────────────────────────
-interface WizardFundCandidate {
-  fund_code: string;
-  fund_title: string;
-  fund_type: string;
-  spk_risk_value: number;
-  transparency_score: number;
-  annual_mgmt_fee_pct: number;
-  annual_real_return_pct: number;
-  is_katilim_compliant: boolean;
-  horizon_tags: Array<"SHORT" | "MEDIUM" | "LONG">;
-  drawdown_tolerance: "ZERO" | "MOD_10" | "HIGH_20";
-  academic_reason: string;
-}
-
-const WIZARD_FUND_UNIVERSE: WizardFundCandidate[] = [
-  {
-    fund_code: "TI1",
-    fund_title: "İş Portföy Para Piyasası (TL) Fonu",
-    fund_type: "Para Piyasası (TL) Fonu",
-    spk_risk_value: 1,
-    transparency_score: 99,
-    annual_mgmt_fee_pct: 0.85,
-    annual_real_return_pct: 5.4,
-    is_katilim_compliant: false,
-    horizon_tags: ["SHORT", "MEDIUM"],
-    drawdown_tolerance: "ZERO",
-    academic_reason: "T+0 valörlü yüksek likidite, %0,85 düşük yönetim ücreti ve sıfıra yakın (-%0,08) maksimum düşüş ile kısa vadeli anapara koruma hedefiyle uyumludur.",
-  },
-  {
-    fund_code: "KRF",
-    fund_title: "Kuveyt Türk Portföy Kısa Vadeli Kira Sertifikaları Katılım Fonu",
-    fund_type: "Kira Sertifikası / Katılım Fonu",
-    spk_risk_value: 1,
-    transparency_score: 97,
-    annual_mgmt_fee_pct: 0.95,
-    annual_real_return_pct: 4.8,
-    is_katilim_compliant: true,
-    horizon_tags: ["SHORT", "MEDIUM"],
-    drawdown_tolerance: "ZERO",
-    academic_reason: "%100 faizsiz kısa vadeli kira sertifikalarından (sukuk) oluşur; anapara dalgalanması istemeyen ve katılım hassasiyeti taşıyan yatırımcılar için idealdir.",
-  },
-  {
-    fund_code: "TTA",
-    fund_title: "İş Portföy Altın Fonu",
-    fund_type: "Kıymetli Madenler / Altın Fonu",
-    spk_risk_value: 6,
-    transparency_score: 95,
-    annual_mgmt_fee_pct: 1.95,
-    annual_real_return_pct: 10.2,
-    is_katilim_compliant: true,
-    horizon_tags: ["MEDIUM", "LONG"],
-    drawdown_tolerance: "MOD_10",
-    academic_reason: "Enflasyona ve kur şoklarına karşı altın ve altına dayalı kira sertifikalarıyla reel alım gücünü korur; yüksek şeffaflık puanına (95/100) sahiptir.",
-  },
-  {
-    fund_code: "KZL",
-    fund_title: "Kuveyt Türk Portföy Altın Katılım Fonu",
-    fund_type: "Katılım / Altın Fonu",
-    spk_risk_value: 6,
-    transparency_score: 96,
-    annual_mgmt_fee_pct: 1.65,
-    annual_real_return_pct: 10.6,
-    is_katilim_compliant: true,
-    horizon_tags: ["MEDIUM", "LONG"],
-    drawdown_tolerance: "MOD_10",
-    academic_reason: "Sıfır faizli enstrüman garantisi, düşük yönetim ücreti (%1,65) ve güçlü reel getiri (+%10,6) ile orta-uzun vadeli katılım yatırımcısına uygundur.",
-  },
-  {
-    fund_code: "IPB",
-    fund_title: "İstanbul Portföy Birinci Değişken Fon",
-    fund_type: "Değişken / Çoklu Varlık Fonu",
-    spk_risk_value: 5,
-    transparency_score: 91,
-    annual_mgmt_fee_pct: 2.55,
-    annual_real_return_pct: 11.4,
-    is_katilim_compliant: false,
-    horizon_tags: ["MEDIUM", "LONG"],
-    drawdown_tolerance: "MOD_10",
-    academic_reason: "Aktif çoklu varlık dağılımı ve +4,85% pozitif Jensen Alfası (α) ile orta vadede -%10 dalgalanma sınırında yüksek reel getiri üretmektedir.",
-  },
-  {
-    fund_code: "MAC",
-    fund_title: "Marmara Capital Portföy Hisse Senedi (TL) Fonu (Hisse Yoğun)",
-    fund_type: "Hisse Senedi Yoğun Fon",
-    spk_risk_value: 6,
-    transparency_score: 98,
-    annual_mgmt_fee_pct: 2.08,
-    annual_real_return_pct: 14.8,
-    is_katilim_compliant: false,
-    horizon_tags: ["LONG"],
-    drawdown_tolerance: "HIGH_20",
-    academic_reason: "%0 stopaj avantajı, 98/100 şeffaflık skoru, +6,40% pozitif Jensen Alfası ve bağımsız hisse seçimiyle uzun vadeli reel büyüme kriterinde 1. sıradadır.",
-  },
-  {
-    fund_code: "AFT",
-    fund_title: "Ak Portföy Yeni Teknolojiler Yabancı Hisse Senedi Fonu",
-    fund_type: "Yabancı Hisse / Teknoloji Fonu",
-    spk_risk_value: 6,
-    transparency_score: 96,
-    annual_mgmt_fee_pct: 2.9,
-    annual_real_return_pct: 12.1,
-    is_katilim_compliant: false,
-    horizon_tags: ["LONG"],
-    drawdown_tolerance: "HIGH_20",
-    academic_reason: "Küresel teknoloji devlerine (NASDAQ-100) TL bazında yatırım imkanı ve 96/100 KAP/Takasbank şeffaflık puanı sunar.",
-  },
-  {
-    fund_code: "KPC",
-    fund_title: "Kuveyt Türk Portföy Katılım Hisse Senedi Fonu (Hisse Yoğun)",
-    fund_type: "Katılım Hisse Yoğun Fon",
-    spk_risk_value: 6,
-    transparency_score: 96,
-    annual_mgmt_fee_pct: 2.05,
-    annual_real_return_pct: 13.4,
-    is_katilim_compliant: true,
-    horizon_tags: ["MEDIUM", "LONG"],
-    drawdown_tolerance: "HIGH_20",
-    academic_reason: "Katılım endeksindeki şirketlere yatırım yapar; %0 stopaj istisnası, %100 faizsiz portföy yapısı ve yüksek reel getiri potansiyeline sahiptir.",
-  },
-  {
-    fund_code: "ZJL",
-    fund_title: "Ziraat Portföy Katılım Fonu",
-    fund_type: "Katılım (Faizsiz) Fonu",
-    spk_risk_value: 5,
-    transparency_score: 95,
-    annual_mgmt_fee_pct: 1.85,
-    annual_real_return_pct: 8.9,
-    is_katilim_compliant: true,
-    horizon_tags: ["MEDIUM", "LONG"],
-    drawdown_tolerance: "MOD_10",
-    academic_reason: "Kira sertifikaları ve katılım paylarını dengeli birleştirerek orta vadede ılımlı dalgalanma ve faizsiz reel getiri sağlar.",
-  },
-];
-
-export function AcademicFundWizard({
-  onSelectFundForAnalytics,
+export function ManagementFeeErosionCard({
+  fundCodes = ["AFT", "MAC", "TTA", "IPB", "TI1"],
+  fundsSummary = [],
 }: {
-  onSelectFundForAnalytics?: (fundCode: string) => void;
+  fundCodes?: string[];
+  fundsSummary?: any[];
 }) {
-  const [horizon, setHorizon] = useState<"SHORT" | "MEDIUM" | "LONG">("MEDIUM");
-  const [tolerance, setTolerance] = useState<"ZERO" | "MOD_10" | "HIGH_20">("MOD_10");
-  const [katilimOnly, setKatilimOnly] = useState<boolean>(false);
-  const [priority, setPriority] = useState<"LOW_FEE" | "HIGH_TRANSPARENCY" | "HIGH_REAL_RETURN">(
-    "HIGH_REAL_RETURN"
-  );
+  const codes = fundCodes.length > 0 ? fundCodes : ["AFT", "MAC", "TTA", "IPB", "TI1"];
+  const [activeCode, setActiveCode] = useState<string>(codes[0] || "AFT");
+  const [initialCapital, setInitialCapital] = useState<number>(100000);
 
-  const matchedFunds = useMemo(() => {
-    const scored = WIZARD_FUND_UNIVERSE.map((f) => {
-      let score = 0;
+  useEffect(() => {
+    if (!codes.includes(activeCode)) {
+      setActiveCode(codes[0] || "AFT");
+    }
+  }, [codes, activeCode]);
 
-      // 1. Faiz / Katılım filtresi
-      if (katilimOnly && !f.is_katilim_compliant) {
-        score -= 500;
-      } else if (katilimOnly && f.is_katilim_compliant) {
-        score += 50;
-      }
+  const erosion = useMemo(() => {
+    const code = (activeCode || "AFT").trim().toUpperCase();
+    const fSum = Array.isArray(fundsSummary)
+      ? fundsSummary.find((x: any) => x?.fund_code === code)
+      : null;
+    const prof = getFundAcademicProfile(code, fSum?.fund_title, fSum?.fund_type);
+    const feePct = prof.annual_mgmt_fee_pct;
+    const grossAnnualReturn = 0.25; // %25 yıllık reel/sabit baz büyüme varsayımı
+    const years = 10;
 
-      // 2. Vade uyumu
-      if (f.horizon_tags.includes(horizon)) {
-        score += 35;
-      }
+    const grossEnd10Y = initialCapital * Math.pow(1 + grossAnnualReturn, years);
+    const netRate = grossAnnualReturn - feePct / 100;
+    const netEnd10Y = initialCapital * Math.pow(1 + netRate, years);
+    const lowFeeEnd10Y = initialCapital * Math.pow(1 + (grossAnnualReturn - 0.005), years);
 
-      // 3. Düşüş toleransı uyumu
-      if (f.drawdown_tolerance === tolerance) {
-        score += 40;
-      } else if (tolerance === "ZERO" && f.spk_risk_value <= 2) {
-        score += 30;
-      } else if (tolerance === "ZERO" && f.spk_risk_value >= 5) {
-        score -= 45;
-      }
+    const totalFeeLostTL = Math.max(0, grossEnd10Y - netEnd10Y);
+    const lostSharePct = grossEnd10Y > 0 ? (totalFeeLostTL / grossEnd10Y) * 100 : 0;
+    const vsLowFeeDiffTL = Math.max(0, lowFeeEnd10Y - netEnd10Y);
 
-      // 4. Öncelikli Kriter Ağırlıklandırması
-      if (priority === "LOW_FEE") {
-        score += (3.5 - f.annual_mgmt_fee_pct) * 25;
-      } else if (priority === "HIGH_TRANSPARENCY") {
-        score += f.transparency_score * 0.8;
-      } else {
-        score += f.annual_real_return_pct * 4.5;
-      }
-
-      return { ...f, matchScore: Math.round(score) };
-    });
-
-    return scored.sort((a, b) => b.matchScore - a.matchScore).slice(0, 3);
-  }, [horizon, tolerance, katilimOnly, priority]);
+    return {
+      fund_code: code,
+      fund_title: prof.fund_title,
+      feePct,
+      grossEnd10Y,
+      netEnd10Y,
+      lowFeeEnd10Y,
+      totalFeeLostTL,
+      lostSharePct,
+      vsLowFeeDiffTL,
+    };
+  }, [activeCode, fundsSummary, initialCapital]);
 
   return (
-    <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-white to-blue-50/80 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/40 border-2 border-indigo-200 dark:border-indigo-900/70 space-y-5 shadow-sm">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="space-y-1">
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950 px-3 py-1 rounded-full">
-            <Compass className="w-3.5 h-3.5" />
-            🧭 30 Saniyede Akademik Fon Keşif Sihirbazı • Karar Ağacı Motoru
+    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm flex flex-col justify-between">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-full">
+            💸 10 Yıllık Yönetim Ücreti Bileşik Erime Analizi
           </span>
-          <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-            4 Hızlı Soruda Vadenize, Risk Toleransınıza ve Hassasiyetinize En Uygun 3 TEFAS Fonunu Keşfedin
+          {codes.length > 1 && (
+            <div className="flex flex-wrap gap-1">
+              {codes.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setActiveCode(c)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${
+                    activeCode === c
+                      ? "bg-amber-600 text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h3 className="text-base font-bold">
+            [{erosion.fund_code}] Yıllık %{formatNumberTR(erosion.feePct, 2)} Yönetim Ücretinin 10 Yıldaki Bileşik Etkisi
           </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            SPK risk ölçeği (1-7), yönetim ücreti kesintisi, katılım uyumu ve Fisher reel getiri kriterlerine göre deterministik eşleştirme yapar.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            TEFAS fonlarında yönetim ücreti fiyattan her gün (~%{formatNumberTR(erosion.feePct / 365, 4)}/gün) otomatik düşülür; uzun vadede bileşik getiri farkı yaratır.
           </p>
         </div>
-      </div>
 
-      {/* 4 Karar Ağacı Sorusu */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Soru 1 */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="text-xs font-extrabold text-indigo-900 dark:text-indigo-300">
-            1. Yatırım Vadeniz Nedir?
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { key: "SHORT", label: "Kısa Vade (1 - 3 Ay)" },
-              { key: "MEDIUM", label: "Orta Vade (6 - 12 Ay)" },
-              { key: "LONG", label: "Uzun Vade (1+ Yıl)" },
-            ].map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setHorizon(opt.key as any)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  horizon === opt.key
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Soru 2 */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="text-xs font-extrabold text-indigo-900 dark:text-indigo-300">
-            2. Geçici Düşüş Toleransınız?
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { key: "ZERO", label: "Anaparam hiç düşmesin" },
-              { key: "MOD_10", label: "Enflasyonu yenmek için -%10 dalgalanma" },
-              { key: "HIGH_20", label: "Yüksek büyüme için -%20+ dalgalanma" },
-            ].map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setTolerance(opt.key as any)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  tolerance === opt.key
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Soru 3 */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="text-xs font-extrabold text-indigo-900 dark:text-indigo-300">
-            3. Faiz / Katılım Hassasiyetiniz Var mı?
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { key: false, label: "Farketmez (Tüm TEFAS Fonları)" },
-              { key: true, label: "Evet, sadece Faizsiz / Katılım & Altın" },
-            ].map((opt) => (
-              <button
-                key={String(opt.key)}
-                type="button"
-                onClick={() => setKatilimOnly(opt.key)}
-                className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold transition-all ${
-                  katilimOnly === opt.key
-                    ? "bg-teal-600 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Soru 4 */}
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
-          <div className="text-xs font-extrabold text-indigo-900 dark:text-indigo-300">
-            4. Öncelikli Akademik Kriteriniz?
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { key: "LOW_FEE", label: "Düşük Yönetim Ücreti Kesintisi" },
-              { key: "HIGH_TRANSPARENCY", label: "Yüksek Şeffaflık Skoru (KAP/SPK)" },
-              { key: "HIGH_REAL_RETURN", label: "Yüksek Fisher Reel Getiri" },
-            ].map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setPriority(opt.key as any)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  priority === opt.key
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Eşleşen 3 Fon Çıktısı */}
-      <div className="space-y-3 pt-2">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs sm:text-sm font-extrabold text-indigo-950 dark:text-indigo-200">
-            🎓 TÜBİTAK 2209-A Akademik Karar Ağacı Eşleşmesi (Yatırım Tavsiyesi Değildir)
-          </h4>
-          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-            En Uygun 3 Gerçek TEFAS Fonu
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {matchedFunds.map((f, idx) => (
-            <div
-              key={f.fund_code}
-              className="p-4 rounded-2xl bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-slate-800 hover:border-indigo-500 transition-all flex flex-col justify-between space-y-3 shadow-sm"
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Başlangıç Sermayesi:</span>
+          {[50000, 100000, 500000].map((amt) => (
+            <button
+              key={amt}
+              type="button"
+              onClick={() => setInitialCapital(amt)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                initialCapital === amt
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+              }`}
             >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-xs font-extrabold">
-                    #{idx + 1} Eşleşme • {f.fund_code}
-                  </span>
-                  {f.is_katilim_compliant && (
-                    <span className="px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 text-[10px] font-bold">
-                      🟢 Katılım / Faizsiz Uyumlu
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <div className="font-bold text-sm text-slate-900 dark:text-white">
-                    {f.fund_title}
-                  </div>
-                  <div className="text-[11px] text-slate-500">{f.fund_type}</div>
-                </div>
-
-                {/* 4 Kriter Rozeti */}
-                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                  <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/70">
-                    <span className="text-slate-500 block">Şeffaflık Skoru:</span>
-                    <span className="font-extrabold text-emerald-600 font-mono">
-                      {f.transparency_score} / 100
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/70">
-                    <span className="text-slate-500 block">SPK Risk Değeri:</span>
-                    <span className="font-extrabold text-blue-600 font-mono">
-                      {f.spk_risk_value} / 7
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/70">
-                    <span className="text-slate-500 block">Yönetim Ücreti:</span>
-                    <span className="font-extrabold text-amber-600 font-mono">
-                      %{formatNumberTR(f.annual_mgmt_fee_pct, 2)} / yıl
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/70">
-                    <span className="text-slate-500 block">Yıllık Reel Getiri:</span>
-                    <span className="font-extrabold text-emerald-600 font-mono">
-                      +%{formatNumberTR(f.annual_real_return_pct, 1)}
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {f.academic_reason}
-                </p>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                {onSelectFundForAnalytics ? (
-                  <button
-                    type="button"
-                    onClick={() => onSelectFundForAnalytics(f.fund_code)}
-                    className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    Analiz Laboratuvarında İncele ({f.fund_code})
-                  </button>
-                ) : (
-                  <a
-                    href={`/analytics?fund=${f.fund_code}`}
-                    className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    Analiz Laboratuvarında İncele ({f.fund_code})
-                  </a>
-                )}
-              </div>
-            </div>
+              {amt.toLocaleString("tr-TR")} ₺
+            </button>
           ))}
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+            <div className="text-[11px] text-slate-500 font-semibold">Ücretsiz Brüt Büyüme (10 Yıl)</div>
+            <div className="text-base font-black font-mono text-slate-900 dark:text-white mt-1">
+              {formatNumberTR(erosion.grossEnd10Y, 0)} ₺
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">%0 Kesinti Senaryosu</div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+            <div className="text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+              [{erosion.fund_code}] Net Bitiş (%{formatNumberTR(erosion.feePct, 2)}/Yıl)
+            </div>
+            <div className="text-base font-black font-mono text-emerald-700 dark:text-emerald-300 mt-1">
+              {formatNumberTR(erosion.netEnd10Y, 0)} ₺
+            </div>
+            <div className="text-[10px] text-emerald-600/80 dark:text-emerald-400 mt-0.5">
+              Kesinti Sonrası Net Portföy
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+            <div className="text-[11px] text-rose-700 dark:text-rose-300 font-semibold">
+              10 Yılda Erime / Fırsat Maliyeti
+            </div>
+            <div className="text-base font-black font-mono text-rose-600 dark:text-rose-400 mt-1">
+              -{formatNumberTR(erosion.totalFeeLostTL, 0)} ₺
+            </div>
+            <div className="text-[10px] text-rose-600/80 dark:text-rose-400 mt-0.5">
+              Potansiyel birikimin %{formatNumberTR(erosion.lostSharePct, 1)}&apos;i
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Görsel Karşılaştırma Çubuğu */}
+      <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-slate-600 dark:text-slate-300">
+            Yatırımcıya Kalan Net Pay vs. Bileşik Ücret Erimesi
+          </span>
+          <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+            %{formatNumberTR(100 - erosion.lostSharePct, 1)} Net / %{formatNumberTR(erosion.lostSharePct, 1)} Kesinti
+          </span>
+        </div>
+        <div className="w-full h-3.5 rounded-full bg-rose-200 dark:bg-rose-950 overflow-hidden flex">
+          <div
+            className="h-full bg-emerald-500 transition-all"
+            style={{ width: `${Math.max(10, Math.min(100, 100 - erosion.lostSharePct))}%` }}
+          />
+        </div>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          💡 Düşük ücretli (%0,50/yıl) bir alternatif fona kıyasla 10 yıllık net fark:{" "}
+          <strong className="text-slate-800 dark:text-slate-200 font-mono">
+            {formatNumberTR(erosion.vsLowFeeDiffTL, 0)} TL
+          </strong>
+          .
+        </p>
       </div>
     </div>
   );

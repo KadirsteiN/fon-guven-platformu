@@ -13,7 +13,6 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { apiFetch, formatNumberTR } from "@/lib/api";
-import { AcademicFundWizard } from "@/components/AcademicModules";
 
 export default function DashboardPage() {
   const [health, setHealth] = useState<any>(null);
@@ -22,6 +21,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCat, setSelectedCat] = useState("ALL");
+  const [showAllFunds, setShowAllFunds] = useState(false);
 
   async function loadDashboard() {
     setLoading(true);
@@ -119,21 +119,24 @@ export default function DashboardPage() {
     return true;
   });
 
+  const displayedSummaries = showAllFunds
+    ? filteredSummaries
+    : filteredSummaries.slice(0, 10);
+
   return (
-    <div className="space-y-6">
-      {/* 1. EN ÜSTTE: Üst Karşılama ve Sistem Doğrulama Kartı (Hero) */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-700 via-blue-800 to-slate-900 text-white shadow-sm">
+    <div className="space-y-4">
+      {/* 1. EN ÜSTTE: Kompakt Üst Karşılama ve Sistem Doğrulama Kartı (Hero) */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-700 via-blue-800 to-slate-900 text-white shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-1.5">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/40">
-              TÜBİTAK 2209-A Araştırma Projesi
+          <div className="space-y-1">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/40">
+              TÜBİTAK 2209-A Araştırma Projesi • Sıfır Sahte Veri İlkesi
             </span>
-            <h2 className="text-xl sm:text-2xl font-bold">
+            <h2 className="text-lg sm:text-xl font-bold">
               Yatırım Fonları, Finansal Şeffaflık ve Fonlara Güven Platformu
             </h2>
-            <p className="text-xs sm:text-sm text-blue-100 max-w-3xl">
-              Bu platformda hiçbir sahte (mock) piyasa verisi kullanılmaz. Tüm
-              fon analizleri{" "}
+            <p className="text-xs text-blue-100 max-w-3xl">
+              Tüm fon analizleri{" "}
               <strong>
                 {Number(dbSum.total_real_tefas_price_records || 0).toLocaleString(
                   "tr-TR"
@@ -141,22 +144,22 @@ export default function DashboardPage() {
               </strong>{" "}
               gerçek TEFAS işlem günü kaydına ({dbSum.oldest_price_date} &rarr;{" "}
               {dbSum.latest_price_date},{" "}
-              <strong>{dbSum.tracked_funds_count} Fon</strong>), tüm hukuki
-              açıklamalar ise <strong>6362 sayılı SPKn</strong> ve{" "}
+              <strong>{dbSum.tracked_funds_count} Fon</strong>), hukuki
+              kanıtlar ise <strong>6362 sayılı SPKn</strong> ve{" "}
               <strong>SPK Tebliğlerine</strong> dayanır.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2.5 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Link
               href="/evidence"
-              className="px-4 py-2.5 rounded-xl bg-white text-blue-900 font-semibold text-xs sm:text-sm hover:bg-blue-50 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-white text-blue-900 font-semibold text-xs hover:bg-blue-50 transition-colors flex items-center gap-1.5"
             >
               <ShieldCheck className="w-4 h-4" />
-              15 Kanıt Kartını İncele
+              15 Kanıt Kartı
             </Link>
             <Link
               href="/baskets"
-              className="px-4 py-2.5 rounded-xl bg-blue-600/80 border border-blue-400/40 text-white font-semibold text-xs sm:text-sm hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-blue-600/80 border border-blue-400/40 text-white font-semibold text-xs hover:bg-blue-600 transition-colors flex items-center gap-1.5"
             >
               <Briefcase className="w-4 h-4" />
               Sanal Sepet Laboratuvarı
@@ -165,50 +168,47 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. HEMEN ALTINDA: 🎓 TÜBİTAK 2209-A FİNANSAL OKURYAZARLIK & FON ALGI ANKETİ KARTI */}
-      <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 border border-indigo-500/30">
-        <div className="space-y-2 relative z-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold text-amber-300">
-            <GraduationCap className="w-4 h-4" />
-            TÜBİTAK 2209-A Akademik Araştırma Ölçeği
-          </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-            🎓 Finansal Okuryazarlık &amp; Fon Algı Araştırmasına Katılın
-          </h2>
-          <p className="text-xs sm:text-sm text-indigo-100 max-w-2xl leading-relaxed">
-            14 soruluk bilimsel testimizi çözün; Takasbank güvencesi, yönetim ücretleri ve stopaj konularındaki bilginizi ölçerek anında <strong>Finansal Okuryazarlık Karnenizi</strong> alın!
-          </p>
+      {/* 2. HEMEN ALTINDA: TEK SATIRLIK ŞIK FİNANSAL OKURYAZARLIK ANKETİ DAVET BARI */}
+      <div className="px-5 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-700 via-purple-700 to-blue-700 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-indigo-500/30">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 text-[11px] font-bold text-amber-300 shrink-0">
+            <GraduationCap className="w-3.5 h-3.5" />
+            TÜBİTAK 2209-A Ölçeği
+          </span>
+          <span className="text-xs sm:text-sm font-bold text-white">
+            🎓 Finansal Okuryazarlık &amp; SPK Risk Profili Testi:
+          </span>
+          <span className="text-xs text-indigo-100">
+            14 soruda Takasbank güvencesi, stopaj ve ücret bilginizi ölçün, kişisel karnenizi alın.
+          </span>
         </div>
 
-        <div className="shrink-0 relative z-10 flex flex-wrap gap-2.5">
-          <Link
-            href="/survey"
-            className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm shadow-lg inline-flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
-          >
-            <span>Testi Çöz &amp; Seviyeni Öğren</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
+        <Link
+          href="/survey"
+          className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-sm inline-flex items-center gap-1.5 shrink-0 transition-all"
+        >
+          <span>Testi Çöz &amp; Seviyeni Öğren</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
-      {/* 4 Odak Alanı Yönlendirme ve Özet Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 3. ORTA BÖLÜM: 4 Odak Alanı Yönlendirme ve Özet Kartları */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* 1. Fonlara Güven & Kanıt Merkezi */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-4">
-          <div className="space-y-2">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-3">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                Hukuki Güvence & Şeffaflık
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                Hukuki Güvence
               </span>
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
             </div>
-            <h3 className="font-bold text-base">
+            <h3 className="font-bold text-sm sm:text-base">
               Fonlara Güven & Kanıt Merkezi
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              6362 sayılı SPKn Md. 52-53 varlık ayrılığı ilkesi, Takasbank
-              saklama güvencesi, <strong>{dbSum.evidence_cards_count}</strong>{" "}
-              mevzuat kanıt kartı ve fon bazlı yapısal şeffaflık kontrol listesi.
+              SPKn Md. 52-53 varlık ayrılığı, Takasbank saklama güvencesi,{" "}
+              <strong>{dbSum.evidence_cards_count}</strong> mevzuat kanıt kartı ve şeffaflık kontrolü.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-bold">
@@ -223,7 +223,7 @@ export default function DashboardPage() {
               href="/transparency"
               className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
             >
-              <FileSearch className="w-3.5 h-3.5" /> Fon Şeffaflık Kontrolü
+              <FileSearch className="w-3.5 h-3.5" /> Şeffaflık
             </Link>
           </div>
         </div>
@@ -231,22 +231,20 @@ export default function DashboardPage() {
         {/* 2. Fon Bültenleri & Raporlar */}
         <Link
           href="/bulletins"
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 transition-colors flex flex-col justify-between space-y-4 group"
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 transition-colors flex flex-col justify-between space-y-3 group"
         >
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
                 Kaynak Atıflı • {dbSum.bulletins_count} Rapor
               </span>
-              <FileText className="w-5 h-5 text-blue-600" />
+              <FileText className="w-4 h-4 text-blue-600" />
             </div>
-            <h3 className="font-bold text-base group-hover:text-blue-600 transition-colors">
+            <h3 className="font-bold text-sm sm:text-base group-hover:text-blue-600 transition-colors">
               Fon Bültenleri & Raporlar
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Kesin resmi veriler ile yönetici yorumlarını birbirinden ayıran 7
-              başlıklı kaynak atıflı bülten özetleri ve 2026-07 vs. 2026-10
-              dönem karşılaştırması.
+              Resmi veriler ile yönetici yorumlarını ayıran 7 başlıklı kaynak atıflı bülten özetleri ve dönem kıyaslaması.
             </p>
           </div>
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-blue-600 dark:text-blue-400 inline-flex items-center gap-1">
@@ -257,49 +255,44 @@ export default function DashboardPage() {
         {/* 3. Fon Performans Analizi */}
         <Link
           href="/analytics"
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 transition-colors flex flex-col justify-between space-y-4 group"
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 transition-colors flex flex-col justify-between space-y-3 group"
         >
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-                100 Bazlı Analiz • {dbSum.tracked_funds_count} Fon
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                5 Sekmeli Laboratuvar • {dbSum.tracked_funds_count} Fon
               </span>
-              <LineChart className="w-5 h-5 text-indigo-600" />
+              <LineChart className="w-4 h-4 text-indigo-600" />
             </div>
-            <h3 className="font-bold text-base group-hover:text-indigo-600 transition-colors">
+            <h3 className="font-bold text-sm sm:text-base group-hover:text-indigo-600 transition-colors">
               Fon Performans Analizi
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Tatil günü fiyat çözümleme motoru, <strong>100 bazlı</strong>{" "}
-              normalize edilmiş çoklu fon karşılaştırma grafiği, yıllık
-              volatilite ve maksimum düşüş (MDD) metrikleri.
+              100 bazlı normalize grafik, aylık ısı haritası, reel getiri, stres testi ve su altı (underwater) analizi.
             </p>
           </div>
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-indigo-600 dark:text-indigo-400 inline-flex items-center gap-1">
-            100 Bazlı Performans Analizine Git{" "}
-            <ArrowRight className="w-3.5 h-3.5" />
+            5 Sekmeli Analiz Laboratuvarı <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </Link>
 
         {/* 4. Sanal Sepet Laboratuvarı */}
         <Link
           href="/baskets"
-          className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 transition-colors flex flex-col justify-between space-y-4 group"
+          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500 transition-colors flex flex-col justify-between space-y-3 group"
         >
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                Portföy Simülasyonu
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                Portföy & Korelasyon
               </span>
-              <Briefcase className="w-5 h-5 text-amber-600" />
+              <Briefcase className="w-4 h-4 text-amber-600" />
             </div>
-            <h3 className="font-bold text-base group-hover:text-amber-600 transition-colors">
+            <h3 className="font-bold text-sm sm:text-base group-hover:text-amber-600 transition-colors">
               Sanal Sepet Laboratuvarı
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Özel TL tutarlarıyla çoklu fon sepeti kurulumu, geçmiş gerçek
-              TEFAS fiyatlarıyla ağırlıklı getiri simülasyonu ve fon bazlı kâr
-              katkı payı kırılımı.
+              Özel TL tutarlarıyla çoklu fon sepeti kurulumu, Pearson korelasyon matrisi ($r$) ve ağırlıklı getiri simülasyonu.
             </p>
           </div>
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-amber-600 dark:text-amber-400 inline-flex items-center gap-1">
@@ -308,11 +301,8 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* YENİ MODÜL 5: 🧭 İnteraktif "30 Saniyede Akademik Fon Seçim Sihirbazı" */}
-      <AcademicFundWizard />
-
-      {/* Güncel TEFAS Fonları 2026 Performans ve Risk Özeti Tablosu */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+      {/* 4. Güncel TEFAS Fonları Performans Özeti (Sayfalamalı / İlk 10 Fon) */}
+      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
@@ -381,44 +371,44 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="overflow-x-auto max-h-[540px] overflow-y-auto">
+        <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs sm:text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900 z-10">
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                <th className="py-2.5 pr-4 font-semibold">Fon Kodu</th>
-                <th className="py-2.5 px-4 font-semibold">Fon Ünvanı & Türü</th>
-                <th className="py-2.5 px-4 font-semibold text-right">
+                <th className="py-2 pr-4 font-semibold">Fon Kodu</th>
+                <th className="py-2 px-4 font-semibold">Fon Ünvanı & Türü</th>
+                <th className="py-2 px-4 font-semibold text-right">
                   Başlangıç Fiyatı
                 </th>
-                <th className="py-2.5 px-4 font-semibold text-right">
+                <th className="py-2 px-4 font-semibold text-right">
                   Güncel Fiyat
                 </th>
-                <th className="py-2.5 px-4 font-semibold text-right">
+                <th className="py-2 px-4 font-semibold text-right">
                   Dönem Getirisi
                 </th>
-                <th className="py-2.5 px-4 font-semibold text-right">
+                <th className="py-2 px-4 font-semibold text-right">
                   100 TL&apos;nin Değeri
                 </th>
-                <th className="py-2.5 px-4 font-semibold text-right">
+                <th className="py-2 px-4 font-semibold text-right">
                   Max Drawdown
                 </th>
-                <th className="py-2.5 pl-4 font-semibold text-right">
+                <th className="py-2 pl-4 font-semibold text-right">
                   Yıllık Volatilite
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {filteredSummaries.map((f: any) => {
+              {displayedSummaries.map((f: any) => {
                 const pos = f.return_pct >= 0;
                 return (
                   <tr
                     key={f.fund_code}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/40"
                   >
-                    <td className="py-3 pr-4 font-bold text-blue-600 dark:text-blue-400">
+                    <td className="py-2.5 pr-4 font-bold text-blue-600 dark:text-blue-400">
                       {f.fund_code}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-2.5 px-4">
                       <div className="font-medium text-slate-900 dark:text-white">
                         {f.fund_title}
                       </div>
@@ -426,14 +416,14 @@ export default function DashboardPage() {
                         Kategori: {f.fund_type}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-right font-mono">
+                    <td className="py-2.5 px-4 text-right font-mono">
                       {formatNumberTR(f.start_price, 6)} TL
                     </td>
-                    <td className="py-3 px-4 text-right font-mono font-semibold">
+                    <td className="py-2.5 px-4 text-right font-mono font-semibold">
                       {formatNumberTR(f.end_price, 6)} TL
                     </td>
                     <td
-                      className={`py-3 px-4 text-right font-mono font-bold ${
+                      className={`py-2.5 px-4 text-right font-mono font-bold ${
                         pos
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-rose-600 dark:text-rose-400"
@@ -442,13 +432,13 @@ export default function DashboardPage() {
                       {pos ? "+" : ""}
                       {formatNumberTR(f.return_pct)}%
                     </td>
-                    <td className="py-3 px-4 text-right font-mono font-semibold">
+                    <td className="py-2.5 px-4 text-right font-mono font-semibold">
                       {formatNumberTR(f.normalized_base_100_end)} TL
                     </td>
-                    <td className="py-3 px-4 text-right font-mono text-rose-600 dark:text-rose-400">
+                    <td className="py-2.5 px-4 text-right font-mono text-rose-600 dark:text-rose-400">
                       -{formatNumberTR(f.max_drawdown_pct)}%
                     </td>
-                    <td className="py-3 pl-4 text-right font-mono">
+                    <td className="py-2.5 pl-4 text-right font-mono">
                       {formatNumberTR(f.annualized_volatility_pct)}%
                     </td>
                   </tr>
@@ -457,6 +447,25 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Sayfalama / Tüm Fonları Gör Butonu */}
+        {filteredSummaries.length > 10 && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-500">
+              Toplam <strong>{filteredSummaries.length}</strong> fondan{" "}
+              <strong>{displayedSummaries.length}</strong> tanesi gösteriliyor.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowAllFunds(!showAllFunds)}
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-slate-800 dark:hover:bg-blue-600 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
+            >
+              {showAllFunds
+                ? "Daha Az Göster (İlk 10 Fon)"
+                : `Tüm Fonları Gör (+${filteredSummaries.length - 10} Fon Daha)`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

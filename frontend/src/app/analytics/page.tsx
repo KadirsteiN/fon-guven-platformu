@@ -15,13 +15,12 @@ import { API_BASE_URL, apiFetch, formatNumberTR } from "@/lib/api";
 import SvgLineChart from "@/components/SvgLineChart";
 import RealReturnSimulator from "@/components/RealReturnSimulator";
 import {
-  AcademicFundWizard,
   AcademicPdfReportButton,
   BehavioralFinanceSimulator,
   ClosetIndexingDetective,
   HistoricalStressTestLab,
+  ManagementFeeErosionCard,
   MonthlyReturnsHeatmap,
-  SpkRiskProfileMatcher,
   StyleDriftRadar,
   UnderwaterDrawdownChart,
   WhaleLiquidityRadar,
@@ -84,6 +83,9 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeLabTab, setActiveLabTab] = useState<
+    "PERF_HEATMAP" | "REAL_RETURN" | "RISK_UNDERWATER" | "BEHAVIORAL" | "AUDIT_RADAR"
+  >("PERF_HEATMAP");
 
   const runComparison = async (codesToRun?: string[], customStart?: string, customEnd?: string) => {
     const codes = codesToRun || selectedCodes;
@@ -138,13 +140,6 @@ export default function AnalyticsPage() {
     }
     runComparison();
   }, []);
-
-  const handleWizardSelectFund = (code: string) => {
-    const clean = code.trim().toUpperCase();
-    const nextCodes = [clean, ...selectedCodes.filter((c) => c !== clean)].slice(0, 6);
-    setSelectedCodes(nextCodes);
-    runComparison(nextCodes);
-  };
 
   const toggleFund = (code: string) => {
     if (selectedCodes.includes(code)) {
@@ -218,12 +213,9 @@ export default function AnalyticsPage() {
   }));
 
   return (
-    <div className="space-y-6">
-      {/* YENİ MODÜL 5: 🧭 30 Saniyede Akademik Fon Seçim Sihirbazı */}
-      <AcademicFundWizard onSelectFundForAnalytics={handleWizardSelectFund} />
-
-      {/* Başlık ve Filtre Paneli */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
+    <div className="space-y-4">
+      {/* Başlık ve Kompakt Filtre Paneli */}
+      <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-full mb-2">
@@ -501,7 +493,7 @@ export default function AnalyticsPage() {
             />
 
             {/* Yasal Koruma Rozeti (GÖREV 3.1) */}
-            <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-blue-950/30 border border-amber-300 dark:border-blue-800/80 flex items-center gap-2.5 text-xs text-amber-900 dark:text-blue-200 font-medium">
+            <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-blue-950/30 border border-amber-300 dark:border-blue-800/80 flex items-center gap-2.5 text-xs text-amber-900 dark:text-blue-200 font-medium">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-blue-400 shrink-0" />
               <span>
                 Dikkat: Bu analiz geçmiş TEFAS brüt fiyatları üzerinden hesaplanmıştır. Geçmiş getiri geleceğin garantisi değildir. Yatırım tavsiyesi değildir (YTD).
@@ -509,155 +501,201 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Performans ve Risk Tablosu */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-              <h3 className="text-base font-bold">
-                Doğrulanmış Performans, Maksimum Düşüş (Max Drawdown) ve
-                Volatilite Tablosu
-              </h3>
-              <button
-                type="button"
-                onClick={handleDownloadExcel}
-                disabled={downloadingExcel}
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Özet Tablo + Günlük Seriyi Excel (.xlsx) İndir
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                    <th className="py-2.5 pr-4">Fon</th>
-                    <th className="py-2.5 px-4">Fon Ünvanı & Kategori</th>
-                    <th className="py-2.5 px-4 text-right">
-                      Başlangıç ({data.actual_start_date})
-                    </th>
-                    <th className="py-2.5 px-4 text-right">
-                      Bitiş ({data.actual_end_date})
-                    </th>
-                    <th className="py-2.5 px-4 text-right">Brüt Getiri (%)</th>
-                    <th className="py-2.5 px-4 text-right">
-                      100 Bazlı Bitiş
-                    </th>
-                    <th className="py-2.5 px-4 text-right">
-                      Max Drawdown (%)
-                    </th>
-                    <th className="py-2.5 pl-4 text-right">
-                      Yıllık Volatilite (%)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {data.funds_summary?.map((f: any) => {
-                    const pos = f.return_pct >= 0;
-                    return (
-                      <tr key={f.fund_code}>
-                        <td className="py-3 pr-4 font-bold text-blue-600 dark:text-blue-400">
-                          {f.fund_code}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-slate-900 dark:text-white">
-                            {f.fund_title}
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            {f.fund_type}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono">
-                          {formatNumberTR(f.start_price, 6)} TL
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono">
-                          {formatNumberTR(f.end_price, 6)} TL
-                        </td>
-                        <td
-                          className={`py-3 px-4 text-right font-mono font-bold ${
-                            pos ? "text-emerald-600" : "text-rose-600"
-                          }`}
-                        >
-                          {pos ? "+" : ""}
-                          {formatNumberTR(f.return_pct)}%
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold">
-                          {formatNumberTR(f.normalized_base_100_end)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-rose-600">
-                          -{formatNumberTR(f.max_drawdown_pct)}%
-                        </td>
-                        <td className="py-3 pl-4 text-right font-mono">
-                          {formatNumberTR(f.annualized_volatility_pct)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Tablo Altı Bilgi Rozeti (Disclaimer Badge — GÖREV 3.1) */}
-            <div className="p-3.5 rounded-xl bg-blue-50/80 dark:bg-slate-800/80 border border-blue-300 dark:border-blue-800/70 flex items-center gap-2.5 text-xs text-blue-900 dark:text-blue-200 font-medium">
-              <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>
-                Dikkat: Bu analiz geçmiş TEFAS brüt fiyatları üzerinden hesaplanmıştır. Geçmiş getiri geleceğin garantisi değildir. Yatırım tavsiyesi değildir (YTD).
-              </span>
+          {/* 5 SEKMELİ KOMPAKT ANALİZ LABORATUVARI (Bloomberg / TradingView Tarzı) */}
+          <div className="p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                {
+                  id: "PERF_HEATMAP",
+                  label: "📈 Performans & Aylık Isı Haritası",
+                },
+                {
+                  id: "REAL_RETURN",
+                  label: "💰 Reel Getiri & Küresel Benchmark Simülatörü",
+                },
+                {
+                  id: "RISK_UNDERWATER",
+                  label: "🌊 Risk, Stres Testi & Su Altı (Underwater) Analizi",
+                },
+                {
+                  id: "BEHAVIORAL",
+                  label: "🧠 Davranışsal Finans (Panik vs. DCA)",
+                },
+                {
+                  id: "AUDIT_RADAR",
+                  label: "🕵️‍♂️ Kurumsal Denetim (Balina Likidite & Gizli İndeksleme R²)",
+                },
+              ].map((t) => {
+                const isActive = activeLabTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveLabTab(t.id as any)}
+                    className={`flex-1 min-w-[200px] px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all text-center ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "bg-slate-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* İsteğe Bağlı Açılan Reel Getiri & Küresel Benchmark Simülatörü (GÖREV 2) */}
-          <RealReturnSimulator
-            fundCodes={selectedCodes}
-            startDate={data.actual_start_date || startDate}
-            endDate={data.actual_end_date || endDate}
-            defaultAmount={100000}
-            fundsSummary={data.funds_summary}
-            dailySeries={data.daily_series}
-          />
+          {/* SEKME 1: 📈 Performans & Aylık Isı Haritası */}
+          {activeLabTab === "PERF_HEATMAP" && (
+            <div className="space-y-4">
+              {/* Performans ve Risk Tablosu */}
+              <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h3 className="text-base font-bold">
+                    Doğrulanmış Performans, Maksimum Düşüş (Max Drawdown) ve Volatilite Tablosu
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleDownloadExcel}
+                    disabled={downloadingExcel}
+                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Özet Tablo + Günlük Seriyi Excel (.xlsx) İndir
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                        <th className="py-2 pr-4">Fon</th>
+                        <th className="py-2 px-4">Fon Ünvanı & Kategori</th>
+                        <th className="py-2 px-4 text-right">
+                          Başlangıç ({data.actual_start_date})
+                        </th>
+                        <th className="py-2 px-4 text-right">
+                          Bitiş ({data.actual_end_date})
+                        </th>
+                        <th className="py-2 px-4 text-right">Brüt Getiri (%)</th>
+                        <th className="py-2 px-4 text-right">100 Bazlı Bitiş</th>
+                        <th className="py-2 px-4 text-right">Max Drawdown (%)</th>
+                        <th className="py-2 pl-4 text-right">Yıllık Volatilite (%)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {data.funds_summary?.map((f: any) => {
+                        const pos = f.return_pct >= 0;
+                        return (
+                          <tr key={f.fund_code}>
+                            <td className="py-2.5 pr-4 font-bold text-blue-600 dark:text-blue-400">
+                              {f.fund_code}
+                            </td>
+                            <td className="py-2.5 px-4">
+                              <div className="font-medium text-slate-900 dark:text-white">
+                                {f.fund_title}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                {f.fund_type}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono">
+                              {formatNumberTR(f.start_price, 6)} TL
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono">
+                              {formatNumberTR(f.end_price, 6)} TL
+                            </td>
+                            <td
+                              className={`py-2.5 px-4 text-right font-mono font-bold ${
+                                pos ? "text-emerald-600" : "text-rose-600"
+                              }`}
+                            >
+                              {pos ? "+" : ""}
+                              {formatNumberTR(f.return_pct)}%
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono font-semibold">
+                              {formatNumberTR(f.normalized_base_100_end)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono text-rose-600">
+                              -{formatNumberTR(f.max_drawdown_pct)}%
+                            </td>
+                            <td className="py-2.5 pl-4 text-right font-mono">
+                              {formatNumberTR(f.annualized_volatility_pct)}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-          {/* YENİ MODÜL 3: 🌊 Su Altında Kalma (Underwater Drawdown) ve Sabır Testi Grafiği */}
-          <UnderwaterDrawdownChart
-            fundCodes={selectedCodes}
-            dailySeries={data.daily_series}
-          />
+              {/* Yan Yana 2 Sütun: Aylık Getiri Isı Haritası & 10 Yıllık Yönetim Ücreti Erimesi */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
+                <MonthlyReturnsHeatmap
+                  fundCodes={selectedCodes}
+                  fundsSummary={data.funds_summary}
+                />
+                <ManagementFeeErosionCard
+                  fundCodes={selectedCodes}
+                  fundsSummary={data.funds_summary}
+                />
+              </div>
+            </div>
+          )}
 
-          {/* YENİ MODÜL 4: 🗓️ Aylık Getiri Isı Haritası (Monthly Returns Heatmap) & Kazanma Oranı */}
-          <MonthlyReturnsHeatmap
-            fundCodes={selectedCodes}
-            fundsSummary={data.funds_summary}
-          />
+          {/* SEKME 2: 💰 Reel Getiri & Küresel Benchmark Simülatörü */}
+          {activeLabTab === "REAL_RETURN" && (
+            <RealReturnSimulator
+              fundCodes={selectedCodes}
+              startDate={data.actual_start_date || startDate}
+              endDate={data.actual_end_date || endDate}
+              defaultAmount={100000}
+              fundsSummary={data.funds_summary}
+              dailySeries={data.daily_series}
+              defaultOpen={true}
+            />
+          )}
 
-          {/* YENİ MODÜL 1: 🐋 Sıcak Para & Balina Çıkışı Likidite Şoku Radarı */}
-          <WhaleLiquidityRadar
-            fundCodes={selectedCodes}
-            fundsSummary={data.funds_summary}
-          />
+          {/* SEKME 3: 🌊 Risk, Stres Testi & Su Altı (Underwater) Analizi */}
+          {activeLabTab === "RISK_UNDERWATER" && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+              <UnderwaterDrawdownChart
+                fundCodes={selectedCodes}
+                dailySeries={data.daily_series}
+              />
+              <HistoricalStressTestLab fundCodes={selectedCodes} />
+            </div>
+          )}
 
-          {/* MODÜL 7: SPK Uygunluk Testi Simülatörü (Kişisel Risk Profili 1-7 vs. Fon Risk Değeri Eşleştirici) */}
-          <SpkRiskProfileMatcher fundCodes={selectedCodes} />
+          {/* SEKME 4: 🧠 Davranışsal Finans (Panik vs. DCA) */}
+          {activeLabTab === "BEHAVIORAL" && (
+            <BehavioralFinanceSimulator
+              fundCodes={selectedCodes}
+              dailySeries={data.daily_series}
+              initialAmount={100000}
+            />
+          )}
 
-          {/* MODÜL 2: Gizli İndeksleme (Closet Indexing - R²) ve Alfa (α) Üretim Dedektifi */}
-          <ClosetIndexingDetective
-            fundCodes={selectedCodes}
-            fundsSummary={data.funds_summary}
-          />
-
-          {/* MODÜL 5: Davranışsal Finans Modülü: Panik Satışı vs. Düzenli Birikim (DCA) vs. Sabırlı Yatırımcı */}
-          <BehavioralFinanceSimulator
-            fundCodes={selectedCodes}
-            dailySeries={data.daily_series}
-            initialAmount={100000}
-          />
-
-          {/* MODÜL 6: Tarihi Kriz ve Şok Stres Testi ("O Gün Ne Oldu?" Laboratuvarı) */}
-          <HistoricalStressTestLab fundCodes={selectedCodes} />
-
-          {/* MODÜL 1: Seçili Ana Fon İçin Bülten Vaadi vs. Fiili Portföy Sapma Denetçisi */}
-          <StyleDriftRadar
-            fundCode={selectedCodes[0] || "AFT"}
-            fundTitle={data.funds_summary?.[0]?.fund_title}
-            fundType={data.funds_summary?.[0]?.fund_type}
-          />
+          {/* SEKME 5: 🕵️‍♂️ Kurumsal Denetim (Balina Likidite & Gizli İndeksleme R²) */}
+          {activeLabTab === "AUDIT_RADAR" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+                <WhaleLiquidityRadar
+                  fundCodes={selectedCodes}
+                  fundsSummary={data.funds_summary}
+                />
+                <ClosetIndexingDetective
+                  fundCodes={selectedCodes}
+                  fundsSummary={data.funds_summary}
+                />
+              </div>
+              <StyleDriftRadar
+                fundCode={selectedCodes[0] || "AFT"}
+                fundTitle={data.funds_summary?.[0]?.fund_title}
+                fundType={data.funds_summary?.[0]?.fund_type}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

@@ -34,6 +34,8 @@ interface Props {
   dailySeries?: any[];
   /** Sepet simülasyonundan doğrudan gelen toplam dönem getirisi (%) */
   periodReturnPct?: number;
+  /** Sekmeli görünümde doğrudan açık başlatmak için */
+  defaultOpen?: boolean;
 }
 
 const BENCH_COLORS: Record<string, string> = {
@@ -64,8 +66,9 @@ export default function RealReturnSimulator({
   fundsSummary,
   dailySeries,
   periodReturnPct,
+  defaultOpen = false,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [tab, setTab] = useState<"A" | "B" | "C">("A");
   const [amount, setAmount] = useState<number>(defaultAmount);
   const [mgmtFee, setMgmtFee] = useState<number>(2.0);
@@ -1455,17 +1458,16 @@ export default function RealReturnSimulator({
         );
       })()}
 
-      {/* Akademik Metodoloji ve Fisher Denklemi Kutusu (TÜBİTAK 2209-A) */}
+      {/* Akademik Metodoloji ve Fisher Denklemi Kutusu (TÜBİTAK 2209-A) — Varsayılan Kapalı */}
       <details
-        open
         className="group rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-indigo-200 dark:border-indigo-900/60 p-4 sm:p-5 space-y-3"
       >
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-xs sm:text-sm font-extrabold text-indigo-800 dark:text-indigo-300">
           <span>
-            📐 Akademik Metodoloji ve Finansal Hesaplama Formülleri (TÜBİTAK 2209-A)
+            📐 Metodoloji ve Formülleri Gör (Fisher Denklemi &amp; Akademik Metrikler)
           </span>
           <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-            Fisher Denklemi &amp; Risk Metrikleri
+            Tıkla &amp; Aç
           </span>
         </summary>
 
